@@ -5,14 +5,14 @@ import react from '@vitejs/plugin-react'
 export default defineConfig({
   plugins: [react()],
   server: {
-    port: 5001,
+    port: 5173,
     proxy: {
       '/api': {
-        target: 'http://127.0.0.1:5000',
+        target: 'https://flattrade.captanvizhuthugal.top',
         changeOrigin: true,
       },
       '/ws': {
-        target: 'ws://127.0.0.1:8765',
+        target: 'wss://flattrade.captanvizhuthugal.top/ws',
         ws: true,
       },
       '/npl-time': {

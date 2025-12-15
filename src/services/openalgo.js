@@ -6,8 +6,8 @@
 import logger from '../utils/logger.js';
 import { ConnectionState, setConnectionStatus } from './connectionStatus';
 
-const DEFAULT_HOST = 'http://127.0.0.1:5000';
-const DEFAULT_WS_HOST = '127.0.0.1:8765';
+const DEFAULT_HOST = 'https://flattrade.captanvizhuthugal.top';
+const DEFAULT_WS_HOST = 'wss://flattrade.captanvizhuthugal.top/ws';
 
 /**
  * Global registry of active WebSocket connections
@@ -97,7 +97,7 @@ export const getLoginUrl = () => {
  */
 const getWebSocketUrl = () => {
     const wsHost = localStorage.getItem('oa_ws_url') || DEFAULT_WS_HOST;
-    return `ws://${wsHost}`;
+    return `${wsHost}`;
 };
 
 /**
