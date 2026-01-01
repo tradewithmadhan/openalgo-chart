@@ -10,7 +10,7 @@ import {
 } from 'lightweight-charts';
 import styles from './ChartComponent.module.css';
 import IndicatorLegend from './IndicatorLegend';
-import { getKlines, getHistoricalKlines, subscribeToTicker } from '../../services/openalgo';
+import { getKlines, getHistoricalKlines, subscribeToTicker, saveDrawings, loadDrawings } from '../../services/openalgo';
 import { combinePremiumOHLC, combineMultiLegOHLC } from '../../services/optionChain';
 import { getAccurateISTTimestamp, syncTimeWithAPI, shouldResync } from '../../services/timeService';
 import {
@@ -26,16 +26,20 @@ import {
     calculateSupertrend
 } from '../../utils/indicators';
 import { calculateTPO } from '../../utils/indicators/tpo';
+import { calculateFirstCandle } from '../../utils/indicators/firstCandle';
+import { calculatePriceActionRange } from '../../utils/indicators/priceActionRange';
 import { TPOProfilePrimitive } from '../../plugins/tpo-profile/TPOProfilePrimitive';
 import { calculateHeikinAshi } from '../../utils/chartUtils';
 import { calculateRenko } from '../../utils/renkoUtils';
 import { intervalToSeconds } from '../../utils/timeframes';
 import { logger } from '../../utils/logger.js';
 
-import { LineToolManager, PriceScaleTimer } from '../../plugins/line-tools/line-tools.js';
-import '../../plugins/line-tools/line-tools.css';
+import { LineToolManager } from '../../plugins/line-tools/line-tool-manager';
+import { PriceScaleTimer } from '../../plugins/line-tools/tools/price-scale-timer';
+import '../../plugins/line-tools/floating-toolbar.css';
 import ReplayControls from '../Replay/ReplayControls';
 import ReplaySlider from '../Replay/ReplaySlider';
+import PriceScaleMenu from './PriceScaleMenu';
 
 const TOOL_MAP = {
     'cursor': 'None',
@@ -114,10 +118,13 @@ const ChartComponent = forwardRef(({
     chartAppearance = {},
     strategyConfig = null, // { strategyType, legs: [{ id, symbol, direction, quantity }], exchange, displayName }
     onOpenOptionChain, // Callback to open option chain for current symbol
+    oiLines = null, // { maxCallOI, maxPutOI, maxPain } - OI levels to display as price lines
+    showOILines = false, // Whether to show OI lines
 }, ref) => {
     const chartContainerRef = useRef();
     const [isLoading, setIsLoading] = useState(true);
     const [contextMenu, setContextMenu] = useState({ show: false, x: 0, y: 0 });
+    const [priceScaleMenu, setPriceScaleMenu] = useState({ visible: false, x: 0, y: 0, price: null });
 
     // Close context menu on click outside
     useEffect(() => {
@@ -150,6 +157,9 @@ const ChartComponent = forwardRef(({
     const lineToolManagerRef = useRef(null);
     const priceScaleTimerRef = useRef(null); // Ref for the candle countdown timer
     const tpoProfileRef = useRef(null); // Ref for TPO Profile primitive
+    const oiPriceLinesRef = useRef({ maxCallOI: null, maxPutOI: null, maxPain: null }); // Refs for OI price lines
+    const firstCandleSeriesRef = useRef([]); // Array of line series for all days' high/low
+    const priceActionRangeSeriesRef = useRef([]); // Array of line series for PAR support/resistance
     const wsRef = useRef(null);
     const chartTypeRef = useRef(chartType);
     const dataRef = useRef([]);
@@ -205,6 +215,56 @@ const ChartComponent = forwardRef(({
     useEffect(() => { exchangeRef.current = exchange; }, [exchange]);
     useEffect(() => { intervalRef.current = interval; }, [interval]);
     useEffect(() => { indicatorsRef.current = indicators; }, [indicators]);
+
+    // Track previous symbol for alert persistence
+    const prevSymbolRef = useRef({ symbol: null, exchange: null });
+
+    // === Alert Persistence Helpers ===
+    // Use separate key from App.jsx which uses 'tv_alerts' with different format
+    const CHART_ALERTS_STORAGE_KEY = 'tv_chart_alerts';
+
+    /**
+     * Save alerts for a symbol to localStorage
+     */
+    const saveAlertsForSymbol = useCallback((sym, exch, alerts) => {
+        if (!sym || !alerts) return;
+        try {
+            const key = `${sym}:${exch || 'NSE'}`;
+            const stored = JSON.parse(localStorage.getItem(CHART_ALERTS_STORAGE_KEY) || '{}');
+            stored[key] = alerts;
+            localStorage.setItem(CHART_ALERTS_STORAGE_KEY, JSON.stringify(stored));
+            console.log('[Alerts] Saved', alerts.length, 'alerts for', key, alerts);
+        } catch (err) {
+            console.warn('[Alerts] Failed to save alerts:', err);
+        }
+    }, []);
+
+    /**
+     * Load alerts for a symbol from localStorage
+     */
+    const loadAlertsForSymbol = useCallback((sym, exch) => {
+        if (!sym) return [];
+        try {
+            const key = `${sym}:${exch || 'NSE'}`;
+            const stored = JSON.parse(localStorage.getItem(CHART_ALERTS_STORAGE_KEY) || '{}');
+            const alerts = stored[key] || [];
+            console.log('[Alerts] Loaded', alerts.length, 'alerts for', key, alerts);
+            return alerts;
+        } catch (err) {
+            console.warn('[Alerts] Failed to load alerts:', err);
+            return [];
+        }
+    }, []);
+
+    // Sync interval changes with LineToolManager for drawing visibility filtering
+    useEffect(() => {
+        if (lineToolManagerRef.current && interval) {
+            const seconds = intervalToSeconds(interval);
+            if (typeof lineToolManagerRef.current.setCurrentInterval === 'function') {
+                lineToolManagerRef.current.setCurrentInterval(seconds);
+            }
+        }
+    }, [interval]);
 
     // ============================================
     // CONFIGURABLE CHART CONSTANTS
@@ -1351,15 +1411,12 @@ const ChartComponent = forwardRef(({
             // Ensure alerts primitive (if present) knows the current symbol
             try {
                 // Set symbol on the manager itself for alert notifications
-                if (typeof manager.setSymbol === 'function') {
-                    manager.setSymbol(symbol);
+                // This will also propagate to UserPriceAlerts internally
+                if (typeof manager.setSymbolName === 'function') {
+                    manager.setSymbolName(symbol);
                 }
 
                 const userAlerts = manager._userPriceAlerts;
-                if (userAlerts && typeof userAlerts.setSymbolName === 'function') {
-                    userAlerts.setSymbolName(symbol);
-                }
-
                 // Bridge internal alert list out to React so the Alerts tab
                 // can show alerts created from the chart-side UI.
                 if (userAlerts && typeof userAlerts.alertsChanged === 'function' && typeof userAlerts.alerts === 'function' && typeof onAlertsSync === 'function') {
@@ -1373,6 +1430,14 @@ const ChartComponent = forwardRef(({
                                 type: a.type || 'price',
                             }));
                             onAlertsSync(mapped);
+
+                            // === Alert Auto-Save: Persist to localStorage for cloud sync ===
+                            if (typeof userAlerts.exportAlerts === 'function') {
+                                const alertsToSave = userAlerts.exportAlerts();
+                                saveAlertsForSymbol(symbolRef.current, exchangeRef.current, alertsToSave);
+
+                                // GlobalAlertMonitor refresh disabled - conflicts with watchlist WebSocket
+                            }
                         } catch (err) {
                             console.warn('Failed to sync chart alerts to app', err);
                         }
@@ -1396,6 +1461,22 @@ const ChartComponent = forwardRef(({
                         }
                     }, manager);
                 }
+
+                // Subscribe to price scale + button clicks to show context menu
+                if (userAlerts && typeof userAlerts.priceScaleClicked === 'function') {
+                    userAlerts.priceScaleClicked().subscribe((evt) => {
+                        try {
+                            setPriceScaleMenu({
+                                visible: true,
+                                x: evt.x,
+                                y: evt.y,
+                                price: evt.price
+                            });
+                        } catch (err) {
+                            console.warn('Failed to show price scale menu', err);
+                        }
+                    }, manager);
+                }
             } catch (err) {
                 console.warn('Failed to initialize alert symbol name', err);
             }
@@ -1403,6 +1484,73 @@ const ChartComponent = forwardRef(({
             window.lineToolManager = manager;
             window.chartInstance = chartRef.current;
             window.seriesInstance = series;
+
+            // Load saved drawings from backend
+            const loadSavedDrawings = async () => {
+                console.log('[ChartComponent] loadSavedDrawings called for:', symbol, exchange, interval);
+                try {
+                    const drawings = await loadDrawings(symbol, exchange, interval);
+                    console.log('[ChartComponent] loadDrawings result:', drawings);
+                    if (drawings && drawings.length > 0 && manager.importDrawings) {
+                        console.log('[ChartComponent] Importing', drawings.length, 'drawings...');
+                        manager.importDrawings(drawings, true);
+                        console.log('[ChartComponent] Import complete!');
+                    } else {
+                        console.log('[ChartComponent] No drawings to import or importDrawings not available');
+                    }
+                } catch (error) {
+                    console.warn('[ChartComponent] Failed to load saved drawings:', error);
+                }
+            };
+            loadSavedDrawings();
+
+            // === Alert Persistence: Restore alerts for new symbol ===
+            try {
+                const userAlerts = manager._userPriceAlerts;
+                console.log('[Alerts] Checking restore for', symbol, '- userAlerts exists:', !!userAlerts);
+                if (userAlerts && typeof userAlerts.importAlerts === 'function') {
+                    const savedAlerts = loadAlertsForSymbol(symbol, exchange);
+                    console.log('[Alerts] Found saved alerts:', savedAlerts);
+                    if (savedAlerts && savedAlerts.length > 0) {
+                        userAlerts.importAlerts(savedAlerts);
+                        console.log('[Alerts] Restored', savedAlerts.length, 'alerts for', symbol);
+                    } else {
+                        console.log('[Alerts] No saved alerts for', symbol);
+                    }
+                } else {
+                    console.log('[Alerts] importAlerts not available on userAlerts');
+                }
+            } catch (err) {
+                console.warn('[Alerts] Failed to restore alerts:', err);
+            }
+
+            // Set up debounced auto-save for drawings
+            let saveTimeout = null;
+            const autoSaveDrawings = () => {
+                if (saveTimeout) clearTimeout(saveTimeout);
+                saveTimeout = setTimeout(async () => {
+                    try {
+                        if (manager.exportDrawings) {
+                            const drawings = manager.exportDrawings();
+                            await saveDrawings(symbol, exchange, interval, drawings);
+                            console.log('[ChartComponent] Auto-saved', drawings.length, 'drawings');
+                        }
+                    } catch (error) {
+                        console.warn('[ChartComponent] Failed to auto-save drawings:', error);
+                    }
+                }, 1000); // Debounce 1 second
+            };
+
+            // Connect auto-save to LineToolManager's onDrawingsChanged callback
+            if (manager.setOnDrawingsChanged) {
+                manager.setOnDrawingsChanged(() => {
+                    console.log('[ChartComponent] Drawing changed, triggering auto-save...');
+                    autoSaveDrawings();
+                });
+            }
+
+            // Store autoSave function for external access
+            manager._autoSaveDrawings = autoSaveDrawings;
         }
     };
 
@@ -1475,12 +1623,16 @@ const ChartComponent = forwardRef(({
                 borderColor: theme === 'dark' ? '#2A2E39' : '#e0e3eb',
             },
             handleScroll: {
-                mouseWheel: true,
+                mouseWheel: false,
                 pressedMouseMove: true,
             },
             handleScale: {
                 mouseWheel: true,
                 pinch: true,
+            },
+            kineticScroll: {
+                mouse: false,
+                touch: false,
             },
         });
 
@@ -1787,8 +1939,29 @@ const ChartComponent = forwardRef(({
             }
         }
 
+        // Capture current symbol for cleanup to use (refs will have new values when cleanup runs)
+        const capturedSymbol = symbol;
+        const capturedExchange = exchange;
+
         return () => {
             if (lineToolManagerRef.current) {
+                // === Alert Persistence: Save alerts BEFORE destruction ===
+                try {
+                    const userAlerts = lineToolManagerRef.current._userPriceAlerts;
+                    if (userAlerts && typeof userAlerts.exportAlerts === 'function') {
+                        // Use captured symbol (what it was when effect started), not symbolRef (which is now new)
+                        if (capturedSymbol) {
+                            const alertsToSave = userAlerts.exportAlerts();
+                            console.log('[Alerts] Exporting alerts for', capturedSymbol, ':', alertsToSave);
+                            if (alertsToSave.length > 0) {
+                                saveAlertsForSymbol(capturedSymbol, capturedExchange, alertsToSave);
+                                console.log('[Alerts] Saved', alertsToSave.length, 'alerts for', capturedSymbol, 'before cleanup');
+                            }
+                        }
+                    }
+                } catch (err) {
+                    console.warn('[Alerts] Failed to save alerts in cleanup:', err);
+                }
 
                 try {
                     lineToolManagerRef.current.clearTools();
@@ -1840,6 +2013,9 @@ const ChartComponent = forwardRef(({
             if (ws?.close) ws.close();
         });
         strategyWsRefs.current = {};
+
+        // Update previous symbol ref for next change (Alert save is now in chartType cleanup)
+        prevSymbolRef.current = { symbol, exchange };
 
         // Reset scroll-back loading refs when symbol/interval changes
         isLoadingOlderDataRef.current = false;
@@ -2141,15 +2317,20 @@ const ChartComponent = forwardRef(({
         const lastIndex = data.length - 1;
         const lastDataPoint = data[lastIndex];
 
+        // Get current indicator configuration from ref for accurate period values
+        const currentIndicators = indicatorsRef.current || indicators;
+
         // SMA Indicator
-        if (indicators.sma && smaSeriesRef.current) {
-            if (data.length < 20) {
-                const smaData = calculateSMA(data, 20);
+        const smaConfig = currentIndicators.sma;
+        const smaPeriod = (typeof smaConfig === 'object' && smaConfig?.period) || 20;
+        if (smaConfig && smaSeriesRef.current) {
+            if (data.length < smaPeriod) {
+                const smaData = calculateSMA(data, smaPeriod);
                 if (smaData && smaData.length > 0) {
                     smaSeriesRef.current.setData(smaData);
                 }
             } else {
-                const subset = data.slice(-20);
+                const subset = data.slice(-smaPeriod);
                 const sum = subset.reduce((acc, d) => acc + d.close, 0);
                 const average = sum / subset.length;
                 smaSeriesRef.current.update({ time: lastDataPoint.time, value: average });
@@ -2157,18 +2338,124 @@ const ChartComponent = forwardRef(({
         }
 
         // EMA Indicator
-        if (indicators.ema && emaSeriesRef.current) {
-            if (data.length < 20 || emaLastValueRef.current === null) {
-                const emaData = calculateEMA(data, 20);
+        const emaConfig = currentIndicators.ema;
+        const emaPeriod = (typeof emaConfig === 'object' && emaConfig?.period) || 20;
+        if (emaConfig && emaSeriesRef.current) {
+            if (data.length < emaPeriod || emaLastValueRef.current === null) {
+                const emaData = calculateEMA(data, emaPeriod);
                 if (emaData && emaData.length > 0) {
                     emaLastValueRef.current = emaData[emaData.length - 1].value;
                     emaSeriesRef.current.setData(emaData);
                 }
             } else {
-                const smoothing = 2 / (20 + 1);
+                const smoothing = 2 / (emaPeriod + 1);
                 const emaValue = (lastDataPoint.close - emaLastValueRef.current) * smoothing + emaLastValueRef.current;
                 emaLastValueRef.current = emaValue;
                 emaSeriesRef.current.update({ time: lastDataPoint.time, value: emaValue });
+            }
+        }
+
+        // RSI Indicator
+        const rsiConfig = currentIndicators.rsi;
+        if (rsiConfig?.enabled && rsiSeriesRef.current) {
+            const rsiPeriod = rsiConfig.period || 14;
+            const rsiData = calculateRSI(data, rsiPeriod);
+            if (rsiData && rsiData.length > 0) {
+                rsiSeriesRef.current.setData(rsiData);
+            }
+        }
+
+        // MACD Indicator
+        const macdConfig = currentIndicators.macd;
+        if (macdConfig?.enabled && macdSeriesRef.current.macd) {
+            const fast = macdConfig.fast || 12;
+            const slow = macdConfig.slow || 26;
+            const signal = macdConfig.signal || 9;
+            const macdData = calculateMACD(data, fast, slow, signal);
+            if (macdData) {
+                if (macdData.macd && macdSeriesRef.current.macd) {
+                    macdSeriesRef.current.macd.setData(macdData.macd);
+                }
+                if (macdData.signal && macdSeriesRef.current.signal) {
+                    macdSeriesRef.current.signal.setData(macdData.signal);
+                }
+                if (macdData.histogram && macdSeriesRef.current.histogram) {
+                    macdSeriesRef.current.histogram.setData(macdData.histogram);
+                }
+            }
+        }
+
+        // Stochastic Indicator
+        const stochConfig = currentIndicators.stochastic;
+        if (stochConfig?.enabled && stochasticSeriesRef.current.k) {
+            const kPeriod = stochConfig.kPeriod || 14;
+            const dPeriod = stochConfig.dPeriod || 3;
+            const stochData = calculateStochastic(data, kPeriod, dPeriod);
+            if (stochData) {
+                if (stochData.k && stochasticSeriesRef.current.k) {
+                    stochasticSeriesRef.current.k.setData(stochData.k);
+                }
+                if (stochData.d && stochasticSeriesRef.current.d) {
+                    stochasticSeriesRef.current.d.setData(stochData.d);
+                }
+            }
+        }
+
+        // ATR Indicator
+        const atrConfig = currentIndicators.atr;
+        if (atrConfig?.enabled && atrSeriesRef.current) {
+            const atrPeriod = atrConfig.period || 14;
+            const atrData = calculateATR(data, atrPeriod);
+            if (atrData && atrData.length > 0) {
+                atrSeriesRef.current.setData(atrData);
+            }
+        }
+
+        // Bollinger Bands Indicator
+        const bbConfig = currentIndicators.bollingerBands;
+        if (bbConfig?.enabled && bollingerSeriesRef.current.upper) {
+            const bbPeriod = bbConfig.period || 20;
+            const bbStdDev = bbConfig.stdDev || 2;
+            const bbData = calculateBollingerBands(data, bbPeriod, bbStdDev);
+            if (bbData) {
+                if (bbData.upper && bollingerSeriesRef.current.upper) {
+                    bollingerSeriesRef.current.upper.setData(bbData.upper);
+                }
+                if (bbData.middle && bollingerSeriesRef.current.middle) {
+                    bollingerSeriesRef.current.middle.setData(bbData.middle);
+                }
+                if (bbData.lower && bollingerSeriesRef.current.lower) {
+                    bollingerSeriesRef.current.lower.setData(bbData.lower);
+                }
+            }
+        }
+
+        // Supertrend Indicator
+        const stConfig = currentIndicators.supertrend;
+        if (stConfig?.enabled && supertrendSeriesRef.current) {
+            const stPeriod = stConfig.period || 10;
+            const stMultiplier = stConfig.multiplier || 3;
+            const stData = calculateSupertrend(data, stPeriod, stMultiplier);
+            if (stData && stData.length > 0) {
+                supertrendSeriesRef.current.setData(stData);
+            }
+        }
+
+        // Volume Indicator
+        const volumeConfig = currentIndicators.volume;
+        if (volumeConfig?.enabled && volumeSeriesRef.current) {
+            const volumeData = calculateVolume(data);
+            if (volumeData && volumeData.length > 0) {
+                volumeSeriesRef.current.setData(volumeData);
+            }
+        }
+
+        // VWAP Indicator
+        const vwapConfig = currentIndicators.vwap;
+        if (vwapConfig?.enabled && vwapSeriesRef.current) {
+            const vwapData = calculateVWAP(data);
+            if (vwapData && vwapData.length > 0) {
+                vwapSeriesRef.current.setData(vwapData);
             }
         }
     }, [indicators]);
@@ -2478,6 +2765,153 @@ const ChartComponent = forwardRef(({
             }
         }
 
+        // ========== FIRST CANDLE INDICATOR (5-min only - Lines + Markers for ALL days) ==========
+        const firstCandleConfig = indicatorsConfig.firstCandle;
+        const is5MinChart = intervalRef.current === '5' || intervalRef.current === '5m';
+
+        if (firstCandleConfig?.enabled && is5MinChart) {
+            const highLineColor = firstCandleConfig.highLineColor || '#ef5350';
+            const lowLineColor = firstCandleConfig.lowLineColor || '#26a69a';
+
+            const result = calculateFirstCandle(data, {
+                highlightColor: firstCandleConfig.highlightColor || '#FFD700',
+                signalColor: highLineColor,
+                highLineColor: highLineColor,
+                lowLineColor: lowLineColor
+            });
+
+            // Remove old line series if count changed
+            const existingCount = firstCandleSeriesRef.current.length;
+            const neededCount = result.allLevels.length * 2; // 2 lines per day (high + low)
+
+            if (existingCount !== neededCount) {
+                // Remove all existing series
+                for (const series of firstCandleSeriesRef.current) {
+                    try {
+                        chartRef.current.removeSeries(series);
+                    } catch (e) { /* ignore */ }
+                }
+                firstCandleSeriesRef.current = [];
+            }
+
+            // Create/update line series for each day's high and low
+            if (result.allLevels && result.allLevels.length > 0 && canAddSeries) {
+                let seriesIndex = 0;
+
+                for (const level of result.allLevels) {
+                    const { high, low, startTime, endTime } = level;
+
+                    // High line series for this day
+                    if (!firstCandleSeriesRef.current[seriesIndex]) {
+                        firstCandleSeriesRef.current[seriesIndex] = chartRef.current.addSeries(LineSeries, {
+                            color: highLineColor,
+                            lineWidth: 2,
+                            lineStyle: 2, // Dashed
+                            priceLineVisible: false,
+                            lastValueVisible: false,
+                            crosshairMarkerVisible: false,
+                        });
+                    }
+                    // Set data for high line (horizontal line from start to end of day)
+                    firstCandleSeriesRef.current[seriesIndex].setData([
+                        { time: startTime, value: high },
+                        { time: endTime, value: high }
+                    ]);
+                    seriesIndex++;
+
+                    // Low line series for this day
+                    if (!firstCandleSeriesRef.current[seriesIndex]) {
+                        firstCandleSeriesRef.current[seriesIndex] = chartRef.current.addSeries(LineSeries, {
+                            color: lowLineColor,
+                            lineWidth: 2,
+                            lineStyle: 2, // Dashed
+                            priceLineVisible: false,
+                            lastValueVisible: false,
+                            crosshairMarkerVisible: false,
+                        });
+                    }
+                    // Set data for low line (horizontal line from start to end of day)
+                    firstCandleSeriesRef.current[seriesIndex].setData([
+                        { time: startTime, value: low },
+                        { time: endTime, value: low }
+                    ]);
+                    seriesIndex++;
+                }
+            }
+
+        } else {
+            // Remove all first candle line series when disabled or not 5-min chart
+            for (const series of firstCandleSeriesRef.current) {
+                try {
+                    chartRef.current.removeSeries(series);
+                } catch (e) { /* ignore */ }
+            }
+            firstCandleSeriesRef.current = [];
+        }
+
+        // ========== PRICE ACTION RANGE INDICATOR (All timeframes) ==========
+        const priceActionRangeConfig = indicatorsConfig.priceActionRange;
+
+        if (priceActionRangeConfig?.enabled) {
+            const supportColor = priceActionRangeConfig.supportColor || '#26a69a';
+            const resistanceColor = priceActionRangeConfig.resistanceColor || '#ef5350';
+
+            const parResult = calculatePriceActionRange(data, {
+                supportColor: supportColor,
+                resistanceColor: resistanceColor
+            });
+
+            // Remove old line series if count changed
+            const existingParCount = priceActionRangeSeriesRef.current.length;
+            const neededParCount = parResult.allLevels.length;
+
+            if (existingParCount !== neededParCount) {
+                // Remove all existing series
+                for (const series of priceActionRangeSeriesRef.current) {
+                    try {
+                        chartRef.current.removeSeries(series);
+                    } catch (e) { /* ignore */ }
+                }
+                priceActionRangeSeriesRef.current = [];
+            }
+
+            // Create/update line series for each level
+            if (parResult.allLevels && parResult.allLevels.length > 0 && canAddSeries) {
+                let parSeriesIndex = 0;
+
+                for (const level of parResult.allLevels) {
+                    const { type, value, startTime, endTime, color } = level;
+
+                    // Create or update line series
+                    if (!priceActionRangeSeriesRef.current[parSeriesIndex]) {
+                        priceActionRangeSeriesRef.current[parSeriesIndex] = chartRef.current.addSeries(LineSeries, {
+                            color: color,
+                            lineWidth: 2,
+                            lineStyle: 0, // Solid line
+                            priceLineVisible: false,
+                            lastValueVisible: false,
+                            crosshairMarkerVisible: false,
+                        });
+                    }
+
+                    // Set data for line (horizontal line from start to end of day)
+                    priceActionRangeSeriesRef.current[parSeriesIndex].setData([
+                        { time: startTime, value: value },
+                        { time: endTime, value: value }
+                    ]);
+                    parSeriesIndex++;
+                }
+            }
+        } else {
+            // Remove all PAR line series when disabled
+            for (const series of priceActionRangeSeriesRef.current) {
+                try {
+                    chartRef.current.removeSeries(series);
+                } catch (e) { /* ignore */ }
+            }
+            priceActionRangeSeriesRef.current = [];
+        }
+
         // ========== VOLUME INDICATOR (Overlay at bottom of chart) ==========
         const volumeHidden = indicatorsConfig.volume?.hidden;
         if (indicatorsConfig.volume?.enabled) {
@@ -2767,6 +3201,78 @@ const ChartComponent = forwardRef(({
         }
 
     }, []); // Empty dependency array - indicators passed as parameter
+
+    // ========== OI LINES EFFECT (Max Call OI, Max Put OI, Max Pain) ==========
+    useEffect(() => {
+        if (!mainSeriesRef.current || !chartRef.current) {
+            return;
+        }
+
+        // Helper to create or update a price line
+        const updatePriceLine = (key, price, options) => {
+            if (price && showOILines) {
+                if (oiPriceLinesRef.current[key]) {
+                    // Update existing line
+                    oiPriceLinesRef.current[key].applyOptions({ price, ...options });
+                } else {
+                    // Create new line
+                    oiPriceLinesRef.current[key] = mainSeriesRef.current.createPriceLine({
+                        price,
+                        ...options
+                    });
+                }
+            } else {
+                // Remove line if disabled or no price
+                if (oiPriceLinesRef.current[key]) {
+                    mainSeriesRef.current.removePriceLine(oiPriceLinesRef.current[key]);
+                    oiPriceLinesRef.current[key] = null;
+                }
+            }
+        };
+
+        // Max Call OI Line (Red/Orange - Resistance)
+        updatePriceLine('maxCallOI', oiLines?.maxCallOI, {
+            color: '#ef5350',
+            lineWidth: 2,
+            lineStyle: 2, // Dashed
+            axisLabelVisible: true,
+            title: 'Max Call OI',
+        });
+
+        // Max Put OI Line (Blue/Cyan - Support)
+        updatePriceLine('maxPutOI', oiLines?.maxPutOI, {
+            color: '#42A5F5',
+            lineWidth: 2,
+            lineStyle: 2, // Dashed
+            axisLabelVisible: true,
+            title: 'Max Put OI',
+        });
+
+        // Max Pain Line (Green)
+        updatePriceLine('maxPain', oiLines?.maxPain, {
+            color: '#66BB6A',
+            lineWidth: 2,
+            lineStyle: 2, // Dashed
+            axisLabelVisible: true,
+            title: 'Max Pain',
+        });
+
+        // Cleanup on unmount
+        return () => {
+            if (mainSeriesRef.current) {
+                Object.keys(oiPriceLinesRef.current).forEach(key => {
+                    if (oiPriceLinesRef.current[key]) {
+                        try {
+                            mainSeriesRef.current.removePriceLine(oiPriceLinesRef.current[key]);
+                        } catch (e) {
+                            // Ignore errors during cleanup
+                        }
+                        oiPriceLinesRef.current[key] = null;
+                    }
+                });
+            }
+        };
+    }, [oiLines, showOILines]);
 
     // Separate effect for indicators to prevent data reload
     useEffect(() => {
@@ -3850,6 +4356,36 @@ const ChartComponent = forwardRef(({
                 />
             )}
 
+
+            {/* Price Scale Context Menu */}
+            <PriceScaleMenu
+                visible={priceScaleMenu.visible}
+                x={priceScaleMenu.x}
+                y={priceScaleMenu.y}
+                price={priceScaleMenu.price}
+                symbol={symbol}
+                onAddAlert={() => {
+                    const manager = lineToolManagerRef.current;
+                    const userAlerts = manager && manager._userPriceAlerts;
+                    if (userAlerts && priceScaleMenu.price != null) {
+                        userAlerts.openEditDialog('new', {
+                            price: priceScaleMenu.price,
+                            condition: 'crossing'
+                        });
+                    }
+                }}
+                onDrawHorizontalLine={() => {
+                    const manager = lineToolManagerRef.current;
+                    if (manager && priceScaleMenu.price != null) {
+                        // Create horizontal line directly at the clicked price
+                        manager.createHorizontalLineAtPrice(priceScaleMenu.price);
+                        // Notify parent that a tool is being used
+                        if (onToolUsed) onToolUsed();
+                    }
+                }}
+                onClose={() => setPriceScaleMenu({ visible: false, x: 0, y: 0, price: null })}
+            />
+
             {/* Right-click Context Menu */}
             {contextMenu.show && (
                 <div
@@ -3870,6 +4406,7 @@ const ChartComponent = forwardRef(({
             )}
 
         </div >
+
     );
 });
 
