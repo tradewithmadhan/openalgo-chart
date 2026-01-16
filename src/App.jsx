@@ -2133,17 +2133,16 @@ function App() {
   const { isAuthenticated, setIsAuthenticated } = useUser();
 
   // Cloud Workspace Sync - blocks until cloud data is fetched or 5s timeout
-  // syncKey changes when cloud data is applied, forcing AppContent remount
-  const { isLoaded: isWorkspaceLoaded, syncKey } = useCloudWorkspaceSync(isAuthenticated);
+  // Store is hydrated directly via setFromCloud, no remount needed
+  const { isLoaded: isWorkspaceLoaded } = useCloudWorkspaceSync(isAuthenticated);
 
   // Show loader while checking auth or loading cloud data
   if (!isWorkspaceLoaded) {
     return <WorkspaceLoader />;
   }
 
-  // Now mount AppContent - localStorage is already updated with cloud data
-  // Using syncKey as React key forces remount when cloud data is applied after login
-  return <AppContent key={syncKey} isAuthenticated={isAuthenticated} setIsAuthenticated={setIsAuthenticated} />;
+  // Now mount AppContent - store is already hydrated with cloud data
+  return <AppContent isAuthenticated={isAuthenticated} setIsAuthenticated={setIsAuthenticated} />;
 }
 
 export default App;
