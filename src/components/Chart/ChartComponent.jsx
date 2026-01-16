@@ -158,6 +158,7 @@ const ChartComponent = forwardRef(({
     const dataRef = useRef([]);
     const comparisonSeriesRefs = useRef(new Map());
     const visualTradingRef = useRef(null);
+    const [error, setError] = useState(null);
 
     // Pane context menu hook
     const {
@@ -1888,6 +1889,7 @@ const ChartComponent = forwardRef(({
                 if (cancelled) return;
 
                 if (Array.isArray(data) && data.length > 0 && mainSeriesRef.current) {
+                    setError(null); // Clear any previous errors
                     dataRef.current = data;
 
                     // Track the oldest loaded timestamp for scroll-back loading
@@ -2144,6 +2146,20 @@ const ChartComponent = forwardRef(({
                     return;
                 }
                 console.error('Error loading chart data:', error);
+
+                // Set user-friendly error message
+                let errorMessage = 'Failed to load chart data';
+                if (error.message && error.message.includes('Symbol')) {
+                    errorMessage = error.message;
+                } else if (error.status === 400 || error.status === 404) {
+                    errorMessage = `Symbol '${symbol}' not found`;
+                }
+
+                // If the error object has a JSON body with a message (from chartDataService logs), use it
+                // Note: The fetch service might reject with an Error object that has the text
+
+                setError(errorMessage);
+
                 if (!cancelled) {
                     isActuallyLoadingRef.current = false;
                     setIsLoading(false);
@@ -3791,6 +3807,30 @@ const ChartComponent = forwardRef(({
                 }}
             />
             {isLoading && isActuallyLoadingRef.current && <div className={styles.loadingOverlay}><div className={styles.spinner}></div><div>Loading...</div></div>}
+
+            {error && (
+                <div className={styles.loadingOverlay}>
+                    <div style={{ color: '#F23645', marginBottom: '10px', textAlign: 'center' }}>
+                        <div style={{ fontSize: '24px', marginBottom: '8px' }}>⚠️</div>
+                        <b>Error Loading Data</b>
+                        <div style={{ fontSize: '12px', marginTop: '4px', opacity: 0.8 }}>{error}</div>
+                    </div>
+                    <button
+                        onClick={() => window.location.reload()}
+                        style={{
+                            padding: '6px 16px',
+                            background: '#2962FF',
+                            border: 'none',
+                            borderRadius: '4px',
+                            color: 'white',
+                            cursor: 'pointer',
+                            fontSize: '13px'
+                        }}
+                    >
+                        Reload Page
+                    </button>
+                </div>
+            )}
 
             {/* Symbol + OHLC Header Bar */}
             <OHLCHeader

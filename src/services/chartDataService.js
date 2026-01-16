@@ -277,7 +277,26 @@ export const getTickerPrice = async (symbol, exchange = 'NSE', signal) => {
                 window.location.href = getLoginUrl();
                 return null;
             }
-            throw new Error(`OpenAlgo quotes error: ${response.status} ${response.statusText}`);
+
+            // Try to read custom error message from backend
+            let errorMessage = `OpenAlgo quotes error: ${response.status} ${response.statusText}`;
+            try {
+                const errorData = await response.text(); // Read text first as it might be html or string
+                if (errorData) {
+                    // Try to parse as JSON if possible
+                    try {
+                        const jsonError = JSON.parse(errorData);
+                        if (jsonError.message) errorMessage = jsonError.message;
+                        else errorMessage = errorData;
+                    } catch (e) {
+                        errorMessage = errorData;
+                    }
+                }
+            } catch (e) {
+                // Ignore read error
+            }
+
+            throw new Error(errorMessage);
         }
 
         const data = await response.json();
@@ -319,6 +338,7 @@ export const getTickerPrice = async (symbol, exchange = 'NSE', signal) => {
     } catch (error) {
         if (error.name !== 'AbortError') {
             console.error('Error fetching ticker price:', error);
+            throw error; // Re-throw so consumers (App.jsx) can handle specific errors (e.g. invalid symbol)
         }
         return null;
     }
