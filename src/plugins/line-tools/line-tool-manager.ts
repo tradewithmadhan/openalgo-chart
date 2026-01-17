@@ -1027,6 +1027,10 @@ export class LineToolManager extends PluginBase {
                 return new Callout(this.chart, this.series, p(0), p(1), state.options?.text || 'Callout', opts);
             case 'Path':
                 return new Path(this.chart, this.series, points, opts);
+            case 'Brush':
+                return new Polyline(this.chart, this.series, points, { ...PolylinePresets.brush, ...opts });
+            case 'Highlighter':
+                return new Polyline(this.chart, this.series, points, { ...PolylinePresets.highlighter, ...opts });
             case 'PriceRange':
                 return new PriceRange(this.chart, this.series, p(0), p(1), opts);
             case 'LongPosition':
