@@ -4,7 +4,7 @@ import styles from './IndicatorLegend.module.css';
 /**
  * IndicatorRow - Renders a single indicator with name, params, value, and action buttons
  */
-const IndicatorRow = ({ indicator, onVisibilityToggle, onRemove, onSettings, onPaneMenu, isPaneIndicator }) => (
+const IndicatorRow = ({ indicator, onVisibilityToggle, onRemove, onSettings, onPaneMenu, onAddAlert, isPaneIndicator }) => (
     <div
         className={`${styles.indicatorRow} ${indicator.isHidden ? styles.indicatorHidden : ''}`}
         onContextMenu={(e) => {
@@ -67,6 +67,22 @@ const IndicatorRow = ({ indicator, onVisibilityToggle, onRemove, onSettings, onP
                     </svg>
                 )}
             </button>
+            {/* Add Alert */}
+            {onAddAlert && (
+                <button
+                    className={styles.indicatorActionBtn}
+                    onClick={(e) => {
+                        e.stopPropagation();
+                        const indicatorType = indicator.type || (typeof indicator.id === 'string' ? indicator.id.split('-')[0] : indicator.id);
+                        onAddAlert(indicatorType);
+                    }}
+                    title="Add Alert on Indicator"
+                >
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 18 18" width="18" height="18">
+                        <path fill="currentColor" d="M3.5 9a5.5 5.5 0 1 1 11 0v4.5l1.5 1.5v.5h-14v-.5l1.5-1.5V9zm1.5 4.5h8V9a4 4 0 1 0-8 0v4.5zM9 16.5a1.5 1.5 0 0 1-1.5-1.5h3a1.5 1.5 0 0 1-1.5 1.5z" />
+                    </svg>
+                </button>
+            )}
             {/* Settings */}
             <button
                 className={styles.indicatorActionBtn}
@@ -134,6 +150,7 @@ const IndicatorLegend = ({
     onRemove,
     onSettings,
     onPaneMenu,
+    onAddAlert, // New prop
     maximizedPane = null // New prop
 }) => {
     // Separate indicators into main chart and pane indicators
@@ -173,6 +190,7 @@ const IndicatorLegend = ({
                             onRemove={onRemove}
                             onSettings={onSettings}
                             onPaneMenu={onPaneMenu}
+                            onAddAlert={onAddAlert}
                             isPaneIndicator={true} // It acts as pane indicator but at top
                         />
                     ))}
@@ -194,6 +212,7 @@ const IndicatorLegend = ({
                                 onVisibilityToggle={onVisibilityToggle}
                                 onRemove={onRemove}
                                 onSettings={onSettings}
+                                onAddAlert={onAddAlert}
                             />
                         ))}
                     </div>
@@ -234,6 +253,7 @@ const IndicatorLegend = ({
                                 onRemove={onRemove}
                                 onSettings={onSettings}
                                 onPaneMenu={onPaneMenu}
+                                onAddAlert={onAddAlert}
                                 isPaneIndicator={true}
                             />
                         </div>

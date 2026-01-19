@@ -292,9 +292,11 @@ class GlobalAlertMonitor {
      * @param {Object} alert - Indicator alert object
      * @param {Object} indicatorData - Current indicator values
      * @param {Object} previousData - Previous bar indicator values
+     * @param {number} currentPrice - Current price (for price-based comparisons)
+     * @param {number} previousPrice - Previous price (for price-based comparisons)
      * @returns {AlertTriggerEvent|null}
      */
-    _checkIndicatorAlert(alert, indicatorData, previousData) {
+    _checkIndicatorAlert(alert, indicatorData, previousData, currentPrice = null, previousPrice = null) {
         try {
             const condition = alert.condition;
             if (!condition || !condition.type) {
@@ -311,8 +313,8 @@ class GlobalAlertMonitor {
                 { ...condition, indicator: alert.indicator },
                 currentData,
                 prevData,
-                null,  // currentPrice
-                null   // previousPrice
+                currentPrice,  // Pass current price for price-based comparisons
+                previousPrice  // Pass previous price for price-based comparisons
             );
 
             if (isTriggered) {
@@ -414,13 +416,20 @@ class GlobalAlertMonitor {
 
                     // Check alert condition
                     if (indicatorData && indicatorData.current) {
-                        const triggerEvent = this._checkIndicatorAlert(alert, indicatorData.current, previousData);
+                        // Get previous price for price-based comparisons
+                        const previousPrice = this._lastPrices.get(key);
+                        const triggerEvent = this._checkIndicatorAlert(alert, indicatorData.current, previousData, currentPrice, previousPrice);
 
                         if (triggerEvent) {
                             console.log('[GlobalAlertMonitor] Indicator alert triggered:', triggerEvent);
 
-                            // Mark alert as triggered in App storage
-                            this._markIndicatorAlertTriggered(alert.id);
+                            // Handle frequency: once_per_bar removes alert, every_time keeps it active
+                            const frequency = alert.frequency || 'once_per_bar';
+                            if (frequency === 'once_per_bar') {
+                                // Mark alert as triggered in App storage (will be filtered out on next load)
+                                this._markIndicatorAlertTriggered(alert.id);
+                            }
+                            // For 'every_time', alert remains active and will trigger again
 
                             // Fire callback
                             if (this._onTrigger) {
@@ -479,13 +488,39 @@ class GlobalAlertMonitor {
             return;
         }
 
-        const cacheKey = `${symbol}:${exchange}:${interval}`;
+        const normalizedInterval = this._normalizeInterval(interval);
+        
+        // Store with normalized format
+        const cacheKey = `${symbol}:${exchange}:${normalizedInterval}`;
         this._ohlcCache.set(cacheKey, {
             data: ohlcData,
             timestamp: Date.now()
         });
 
+        // Also store with original format for compatibility
+        if (normalizedInterval !== interval) {
+            const originalKey = `${symbol}:${exchange}:${interval}`;
+            this._ohlcCache.set(originalKey, {
+                data: ohlcData,
+                timestamp: Date.now()
+            });
+        }
+
         logger.debug(`[GlobalAlertMonitor] Updated OHLC cache for ${cacheKey}, bars: ${ohlcData.length}`);
+    }
+
+    /**
+     * Normalize interval format (e.g., '1' -> '1m', '3' -> '3m')
+     * @param {string} interval 
+     * @returns {string} Normalized interval
+     */
+    _normalizeInterval(interval) {
+        if (!interval) return interval;
+        // If interval is just a number, assume minutes
+        if (/^\d+$/.test(interval)) {
+            return `${interval}m`;
+        }
+        return interval;
     }
 
     /**
@@ -496,10 +531,28 @@ class GlobalAlertMonitor {
      * @returns {Array|null}
      */
     _getOHLCData(symbol, exchange, interval) {
-        const cacheKey = `${symbol}:${exchange}:${interval}`;
+        const normalizedInterval = this._normalizeInterval(interval);
+        const cacheKey = `${symbol}:${exchange}:${normalizedInterval}`;
         const cached = this._ohlcCache.get(cacheKey);
 
-        if (!cached) return null;
+        if (!cached) {
+            // Try alternative formats if exact match fails
+            const alternatives = [
+                interval, // Original format
+                interval.replace(/m$/, ''), // Remove 'm' suffix
+                `${interval.replace(/m$/, '')}m`, // Add 'm' suffix
+            ].filter(alt => alt !== normalizedInterval);
+
+            for (const alt of alternatives) {
+                const altKey = `${symbol}:${exchange}:${alt}`;
+                const altCached = this._ohlcCache.get(altKey);
+                if (altCached) {
+                    logger.debug(`[GlobalAlertMonitor] Found OHLC data with alternative interval format: ${alt} (requested: ${interval})`);
+                    return altCached.data;
+                }
+            }
+            return null;
+        }
 
         // Cache is valid for 5 minutes
         const age = Date.now() - cached.timestamp;

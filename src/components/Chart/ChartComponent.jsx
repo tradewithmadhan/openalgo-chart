@@ -88,6 +88,7 @@ const ChartComponent = forwardRef(({
     onDrawingsSync,
     onAlertTriggered,
     onReplayModeChange,
+    onOHLCDataUpdate, // Callback to share OHLC data with GlobalAlertMonitor for indicator alerts
     isDrawingsLocked = false,
     isDrawingsHidden = false,
     isTimerVisible = false,
@@ -104,6 +105,7 @@ const ChartComponent = forwardRef(({
     onOpenObjectTree,
     onOpenTradingPanel, // Callback to open trading panel
     onIndicatorMoveUp, // New prop for moving indicators
+    onOpenIndicatorAlert, // Callback to open indicator alert dialog
 }, ref) => {
     // Get authentication status
     const { isAuthenticated } = useUser();
@@ -141,6 +143,34 @@ const ChartComponent = forwardRef(({
     const [lineToolManager, setLineToolManager] = useState(null);
     useChartDrawings(lineToolManager, symbol, exchange, interval, onDrawingsSync);
     useChartAlerts(lineToolManager, symbol, exchange);
+
+    // Store onOHLCDataUpdate in a ref so it's accessible in WebSocket callbacks
+    const onOHLCDataUpdateRef = useRef(onOHLCDataUpdate);
+    useEffect(() => {
+        onOHLCDataUpdateRef.current = onOHLCDataUpdate;
+    }, [onOHLCDataUpdate]);
+
+    // Share OHLC data with GlobalAlertMonitor for indicator alert evaluation
+    useEffect(() => {
+        if (onOHLCDataUpdate && dataRef.current && dataRef.current.length > 0 && symbol && interval) {
+            // Notify after data is loaded/updated
+            onOHLCDataUpdate(symbol, exchange, interval, dataRef.current);
+        }
+    }, [symbol, exchange, interval, onOHLCDataUpdate]);
+    // Note: dataRef is intentionally NOT in deps to avoid loops - we rely on symbol/interval changes
+
+    // Also share data periodically to keep cache fresh (every 30 seconds)
+    useEffect(() => {
+        if (!onOHLCDataUpdate || !symbol || !interval) return;
+
+        const intervalId = setInterval(() => {
+            if (dataRef.current && dataRef.current.length > 0) {
+                onOHLCDataUpdate(symbol, exchange, interval, dataRef.current);
+            }
+        }, 30000); // Every 30 seconds
+
+        return () => clearInterval(intervalId);
+    }, [symbol, exchange, interval, onOHLCDataUpdate]);
 
     // Close context menu on click outside
     useEffect(() => {
@@ -2076,6 +2106,11 @@ const ChartComponent = forwardRef(({
                     setError(null); // Clear any previous errors
                     dataRef.current = data;
 
+                    // Share OHLC data with GlobalAlertMonitor
+                    if (onOHLCDataUpdateRef.current && symbol && interval) {
+                        onOHLCDataUpdateRef.current(symbol, exchange, interval, data);
+                    }
+
                     // Track the oldest loaded timestamp for scroll-back loading
                     oldestLoadedTimeRef.current = data[0].time;
 
@@ -2185,6 +2220,12 @@ const ChartComponent = forwardRef(({
                             }
 
                             dataRef.current = currentData;
+                            
+                            // Share updated OHLC data with GlobalAlertMonitor
+                            if (onOHLCDataUpdateRef.current && symbol && interval && currentData.length > 0) {
+                                onOHLCDataUpdateRef.current(symbol, exchange, interval, currentData);
+                            }
+                            
                             const currentChartType = chartTypeRef.current;
                             const transformedCandle = transformData([candle], currentChartType)[0];
 
@@ -2288,6 +2329,11 @@ const ChartComponent = forwardRef(({
                             }
 
                             dataRef.current = currentData;
+
+                            // Share updated OHLC data with GlobalAlertMonitor
+                            if (onOHLCDataUpdateRef.current && symbol && interval && currentData.length > 0) {
+                                onOHLCDataUpdateRef.current(symbol, exchange, interval, currentData);
+                            }
 
                             const currentChartType = chartTypeRef.current;
                             const transformedCandle = transformData([candle], currentChartType)[0];
@@ -4270,6 +4316,7 @@ const ChartComponent = forwardRef(({
                 onSettings={(indicatorType) => setIndicatorSettingsOpen(indicatorType)}
                 onPaneMenu={handlePaneMenu}
                 maximizedPane={maximizedPane}
+                onAddAlert={onOpenIndicatorAlert}
             />
 
             {/* Pane Context Menu - TradingView style */}

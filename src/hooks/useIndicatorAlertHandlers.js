@@ -4,6 +4,7 @@
  */
 
 import { useCallback } from 'react';
+import { globalAlertMonitor } from '../services/globalAlertMonitor';
 
 /**
  * Custom hook for indicator alert operations
@@ -37,6 +38,12 @@ export const useIndicatorAlertHandlers = ({
         // Close dialog and reset edit state
         setIsIndicatorAlertOpen(false);
         setIndicatorAlertToEdit(null);
+
+        // Refresh global alert monitor to pick up new/updated alert
+        // Use setTimeout to ensure localStorage is updated first
+        setTimeout(() => {
+            globalAlertMonitor.refresh();
+        }, 100);
     }, [setAlerts, showToast, setIsIndicatorAlertOpen, setIndicatorAlertToEdit, indicatorAlertToEdit]);
 
     return {

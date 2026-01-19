@@ -20,6 +20,8 @@ const IndicatorAlertDialog = ({
     exchange = 'NSE',
     theme = 'dark',
     alertToEdit = null,
+    initialIndicator = null,
+    currentInterval = '1m', // Default if not provided
 }) => {
     const [selectedIndicator, setSelectedIndicator] = useState('');
     const [selectedCondition, setSelectedCondition] = useState(null);
@@ -28,6 +30,7 @@ const IndicatorAlertDialog = ({
     const [message, setMessage] = useState('');
     const [webhookUrl, setWebhookUrl] = useState('');
     const [frequency, setFrequency] = useState('once_per_bar');
+    const [interval, setIntervalState] = useState(currentInterval);
     const [showPlaceholders, setShowPlaceholders] = useState(false);
 
     // Focus trap for accessibility
@@ -96,19 +99,21 @@ const IndicatorAlertDialog = ({
                 setMessage(alertToEdit.message);
                 setWebhookUrl(alertToEdit.webhookUrl || '');
                 setFrequency(alertToEdit.frequency || 'once_per_bar');
+                setIntervalState(alertToEdit.interval || currentInterval);
             } else {
                 // Reset form for fresh create
-                setSelectedIndicator('');
+                setSelectedIndicator(initialIndicator || '');
                 setSelectedCondition(null);
                 setConditionConfig({});
                 setAlertName('');
                 setMessage('');
                 setWebhookUrl('');
                 setFrequency('once_per_bar');
+                setIntervalState(currentInterval);
             }
             setShowPlaceholders(false);
         }
-    }, [isOpen, alertToEdit]);
+    }, [isOpen, alertToEdit, initialIndicator, currentInterval]);
 
     // Update message template when condition changes (only if not editing or if user clears message)
     useEffect(() => {
@@ -177,7 +182,7 @@ const IndicatorAlertDialog = ({
             frequency,
             created_at: alertToEdit ? alertToEdit.created_at : new Date().toISOString(),
             status: 'Active',
-            interval: '1m', // TODO: Get from current chart interval
+            interval, // Use selected interval
         };
 
         onSave(alert);
@@ -376,6 +381,27 @@ const IndicatorAlertDialog = ({
                                             {frequency === 'once_per_bar'
                                                 ? 'Alert triggers once then removes itself'
                                                 : 'Alert triggers every time condition is met'}
+                                        </small>
+                                    </div>
+
+                                    <div className={styles.field}>
+                                        <label htmlFor="alert-interval" className={styles.label}>
+                                            Timeframe
+                                        </label>
+                                        <select
+                                            id="alert-interval"
+                                            className={styles.select}
+                                            value={interval}
+                                            onChange={(e) => setIntervalState(e.target.value)}
+                                        >
+                                            {['1m', '3m', '5m', '15m', '30m', '45m', '1h', '2h', '4h', '1d', '1w', '1M'].map((int) => (
+                                                <option key={int} value={int}>
+                                                    {int}
+                                                </option>
+                                            ))}
+                                        </select>
+                                        <small className={styles.fieldHint}>
+                                            Alert checks will run on this timeframe
                                         </small>
                                     </div>
 
