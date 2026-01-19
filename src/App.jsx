@@ -56,6 +56,7 @@ import PositionTracker from './components/PositionTracker';
 import GlobalAlertPopup from './components/GlobalAlertPopup/GlobalAlertPopup';
 import AccountPanel from './components/AccountPanel';
 import TradingPanel from './components/TradingPanel/TradingPanel';
+import OrderEntryModal from './components/OrderEntryModal/OrderEntryModal';
 import ObjectTreePanel from './components/ObjectTree/ObjectTreePanel';
 import MarketScreenerPanel from './components/MarketScreener/MarketScreenerPanel';
 import CompareOptionsDialog from './components/Chart/CompareOptionsDialog';
@@ -2120,17 +2121,35 @@ function AppContent({ isAuthenticated, setIsAuthenticated }) {
             showOILines={showOILines}
             onOpenSettings={() => setIsSettingsOpen(true)}
             onOpenObjectTree={() => setActiveRightPanel('objectTree')}
-            onOpenTradingPanel={(action, price, orderType) => {
+            onOpenTradingPanel={(action, price, orderType, isModal = false) => {
               setTradingPanelConfig({
                 action: action || 'BUY',
                 price: price ? price.toFixed(2) : '',
-                orderType: orderType || 'LIMIT'
+                orderType: orderType || 'LIMIT',
+                isModal: isModal
               });
-              setActiveRightPanel('trade');
+              if (!isModal) {
+                setActiveRightPanel('trade');
+              }
             }}
           />
         }
       />
+      {/* Order Entry Modal (Popup) */}
+      <OrderEntryModal
+        isOpen={tradingPanelConfig.isOpen === undefined ? !!tradingPanelConfig.isModal : (tradingPanelConfig.isOpen && tradingPanelConfig.isModal)} // Logic: if config set and isModal is true
+        // Actually, we need a better way to track "modal open" state.
+        // Let's assume if isModal is true in config, we show it.
+        // But we need to reset it on close.
+        onClose={() => setTradingPanelConfig(prev => ({ ...prev, isModal: false }))}
+        symbol={activeChart.symbol}
+        exchange={activeChart.exchange}
+        showToast={showToast}
+        initialAction={tradingPanelConfig.action}
+        initialPrice={tradingPanelConfig.price}
+        initialOrderType={tradingPanelConfig.orderType}
+      />
+
       <SymbolSearch
         isOpen={isSearchOpen}
         onClose={() => setIsSearchOpen(false)}

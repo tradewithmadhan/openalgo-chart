@@ -4399,7 +4399,7 @@ const ChartComponent = forwardRef(({
                 onAddOrder={(price) => {
                     // Open trading panel with default settings at price
                     if (onOpenTradingPanel && priceScaleMenu.price != null) {
-                        onOpenTradingPanel('BUY', priceScaleMenu.price, 'LIMIT');
+                        onOpenTradingPanel('BUY', priceScaleMenu.price, 'LIMIT', true);
                     }
                 }}
                 onDrawHorizontalLine={() => {
@@ -4488,7 +4488,7 @@ const ChartComponent = forwardRef(({
                 onAddOrder={(price) => {
                     // Open trading panel with default settings at price
                     if (onOpenTradingPanel) {
-                        onOpenTradingPanel('BUY', price, 'LIMIT');
+                        onOpenTradingPanel('BUY', price, 'LIMIT', true);
                     }
                 }}
                 onToggleCursorLock={() => {

@@ -82,7 +82,16 @@ const AccountPanel = ({
 
     // Use context data directly (OrderContext provides all data)
     const funds = contextFunds;
-    const positions = contextPositions;
+    // Local state for positions to allow real-time updates via WebSocket
+    const [positions, setPositions] = useState([]);
+
+    // Sync local positions with context positions when context updates
+    useEffect(() => {
+        if (contextPositions) {
+            setPositions(contextPositions);
+        }
+    }, [contextPositions]);
+
     const orders = { orders: contextOrders, statistics: {} }; // Wrap for compatibility
     const holdings = { holdings: contextHoldings, statistics: {} }; // Wrap for compatibility
     const trades = contextTrades;
