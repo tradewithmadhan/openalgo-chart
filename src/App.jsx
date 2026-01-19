@@ -9,7 +9,7 @@ import SymbolSearch from './components/SymbolSearch/SymbolSearch';
 import Toast from './components/Toast/Toast';
 import SnapshotToast from './components/Toast/SnapshotToast';
 import html2canvas from 'html2canvas';
-import { getTickerPrice, subscribeToMultiTicker, checkAuth, closeAllWebSockets, forceCloseAllWebSockets, saveUserPreferences, modifyOrder, cancelOrder } from './services/openalgo';
+import { getTickerPrice, subscribeToMultiTicker, checkAuth, closeAllWebSockets, forceCloseAllWebSockets, saveUserPreferences, modifyOrder, cancelOrder, getKlines } from './services/openalgo';
 import { globalAlertMonitor } from './services/globalAlertMonitor';
 
 import BottomBar from './components/BottomBar/BottomBar';
@@ -205,6 +205,7 @@ function AppContent({ isAuthenticated, setIsAuthenticated }) {
   const [alertPrice, setAlertPrice] = useState(null);
   const [isIndicatorAlertOpen, setIsIndicatorAlertOpen] = useState(false);
   const [indicatorAlertToEdit, setIndicatorAlertToEdit] = useState(null);
+  const [indicatorAlertInitialIndicator, setIndicatorAlertInitialIndicator] = useState(null);
 
   // Alert State (persisted with 24h retention)
   const [alerts, setAlerts] = useState(() => {
@@ -282,6 +283,13 @@ function AppContent({ isAuthenticated, setIsAuthenticated }) {
       globalAlertMonitor.stop();
     };
   }, [isAuthenticated, showToast]);
+
+  // Handler to share OHLC data with GlobalAlertMonitor for indicator alerts
+  const handleOHLCDataUpdate = useCallback((symbol, exchange, interval, ohlcData) => {
+    if (symbol && exchange && interval && ohlcData && Array.isArray(ohlcData) && ohlcData.length > 0) {
+      globalAlertMonitor.updateOHLCData(symbol, exchange, interval, ohlcData);
+    }
+  }, []);
 
   // Mobile State
   const isMobile = useIsMobile();
@@ -1225,7 +1233,7 @@ function AppContent({ isAuthenticated, setIsAuthenticated }) {
                     if (!isOnCurrentChart) {
                       // Add to global alert popup (for background alerts)
                       setGlobalAlertPopups(prev => [{
-                        id: `popup-${Date.now()}-${alert.id}`,
+                        id: `popup-${crypto.randomUUID()}-${alert.id}`,
                         alertId: alert.id,
                         symbol: ticker.symbol,
                         exchange: ticker.exchange || 'NSE',
@@ -1237,7 +1245,7 @@ function AppContent({ isAuthenticated, setIsAuthenticated }) {
 
                     // Log entry
                     setAlertLogs(prev => [{
-                      id: Date.now(),
+                      id: crypto.randomUUID(),
                       alertId: alert.id,
                       symbol: ticker.symbol,
                       exchange: ticker.exchange || 'NSE',
@@ -1250,6 +1258,196 @@ function AppContent({ isAuthenticated, setIsAuthenticated }) {
               }
             } catch (err) {
               // Silent fail for alert check
+            }
+
+            // === INDICATOR ALERT MONITORING ===
+            // Check indicator-based alerts using cached OHLC data
+            try {
+              const currentPrice = parseFloat(ticker.last);
+              if (Number.isFinite(currentPrice)) {
+
+                const indicatorAlertsStr = localStorage.getItem('tv_alerts');
+                if (indicatorAlertsStr) {
+                  let allAlerts = JSON.parse(indicatorAlertsStr);
+                  if (Array.isArray(allAlerts)) {
+                    const tickerKey = `${ticker.symbol}:${ticker.exchange || 'NSE'}`;
+
+                    // Filter to active indicator alerts for this symbol
+                    const indicatorAlerts = allAlerts.filter(a =>
+                      a.type === 'indicator' &&
+                      a.status === 'Active' &&
+                      a.symbol === ticker.symbol &&
+                      (a.exchange || 'NSE') === (ticker.exchange || 'NSE')
+                    );
+
+                    if (indicatorAlerts.length > 0) {
+                      if (indicatorAlerts.length > 0) {
+                        // Group alerts by interval to fetch corresponding data
+                        const alertsByInterval = indicatorAlerts.reduce((acc, alert) => {
+                          const interval = alert.interval || '1m';
+                          if (!acc[interval]) acc[interval] = [];
+                          acc[interval].push(alert);
+                          return acc;
+                        }, {});
+
+                        // Process each interval group
+                        for (const [interval, alerts] of Object.entries(alertsByInterval)) {
+                          const ohlcData = globalAlertMonitor._getOHLCData(ticker.symbol, ticker.exchange || 'NSE', interval);
+
+                          if (ohlcData && ohlcData.length > 0) {
+                            for (const alert of alerts) {
+                              try {
+                                const indicatorType = (alert.indicator || '').toLowerCase();
+                                const condition = alert.condition;
+
+                                if (!condition || !condition.type) continue;
+
+                                let indicatorValue = null;
+                                const period = condition.value || 20;
+
+                                // Helper functions for indicator calculations
+                                const calcSMA = (data, len) => {
+                                  if (data.length < len) return null;
+                                  return data.slice(-len).reduce((a, b) => a + b, 0) / len;
+                                };
+
+                                const calcEMA = (data, len) => {
+                                  if (data.length < len) return null;
+                                  const multiplier = 2 / (len + 1);
+                                  let ema = data.slice(0, len).reduce((a, b) => a + b, 0) / len;
+                                  for (let i = len; i < data.length; i++) {
+                                    ema = (data[i] - ema) * multiplier + ema;
+                                  }
+                                  return ema;
+                                };
+
+                                const closes = ohlcData.map(bar => bar.close);
+                                const highs = ohlcData.map(bar => bar.high);
+                                const lows = ohlcData.map(bar => bar.low);
+
+                                if (indicatorType === 'ema') {
+                                  indicatorValue = calcEMA(closes, period);
+                                } else if (indicatorType === 'sma') {
+                                  indicatorValue = calcSMA(closes, period);
+                                } else if (indicatorType === 'rsi') {
+                                  const rsiPeriod = period || 14;
+                                  if (closes.length >= rsiPeriod + 1) {
+                                    let gains = 0, losses = 0;
+                                    for (let i = closes.length - rsiPeriod; i < closes.length; i++) {
+                                      const diff = closes[i] - closes[i - 1];
+                                      if (diff > 0) gains += diff;
+                                      else losses -= diff;
+                                    }
+                                    const avgGain = gains / rsiPeriod;
+                                    const avgLoss = losses / rsiPeriod;
+                                    indicatorValue = avgLoss === 0 ? 100 : 100 - (100 / (1 + avgGain / avgLoss));
+                                  }
+                                } else if (indicatorType === 'stochastic') {
+                                  const stochPeriod = period || 14;
+                                  if (closes.length >= stochPeriod) {
+                                    const recentHighs = highs.slice(-stochPeriod);
+                                    const recentLows = lows.slice(-stochPeriod);
+                                    const highestHigh = Math.max(...recentHighs);
+                                    const lowestLow = Math.min(...recentLows);
+                                    const latestClose = closes[closes.length - 1];
+                                    indicatorValue = highestHigh !== lowestLow
+                                      ? ((latestClose - lowestLow) / (highestHigh - lowestLow)) * 100
+                                      : 50;
+                                  }
+                                }
+
+                                if (indicatorValue === null) continue;
+
+                                // Get previous price for crossing detection
+                                const prevPriceKey = `${tickerKey}:indicator:${alert.id}`;
+                                const prevPrice = alertPricesRef.current.get(prevPriceKey);
+                                alertPricesRef.current.set(prevPriceKey, currentPrice);
+
+                                if (prevPrice === undefined) continue;
+
+                                // Evaluate crossing condition
+                                let triggered = false;
+                                let direction = '';
+
+                                const crossedAbove = prevPrice < indicatorValue && currentPrice >= indicatorValue;
+                                const crossedBelow = prevPrice > indicatorValue && currentPrice <= indicatorValue;
+
+                                const condType = (condition.type || '').toLowerCase();
+                                const condId = (condition.id || '').toLowerCase();
+
+                                if (condType.includes('cross') || condId.includes('cross')) {
+                                  if (condType.includes('above') || condId.includes('above')) {
+                                    triggered = crossedAbove;
+                                    direction = 'above';
+                                  } else if (condType.includes('below') || condId.includes('below')) {
+                                    triggered = crossedBelow;
+                                    direction = 'below';
+                                  } else {
+                                    triggered = crossedAbove || crossedBelow;
+                                    direction = crossedAbove ? 'above' : 'below';
+                                  }
+                                } else if (condType === 'greater_than' || condId === 'greater_than') {
+                                  triggered = currentPrice > indicatorValue;
+                                  direction = 'above';
+                                } else if (condType === 'less_than' || condId === 'less_than') {
+                                  triggered = currentPrice < indicatorValue;
+                                  direction = 'below';
+                                }
+
+                                if (triggered) {
+                                  const popupDirection = direction === 'above' ? 'up' : 'down';
+
+                                  console.log('[Alerts] INDICATOR ALERT TRIGGERED:', ticker.symbol, popupDirection, alert.indicator, indicatorValue);
+
+                                  // Update React state immutably so UI refreshes (Alerts tab status)
+                                  const updatedAlerts = allAlerts.map(a =>
+                                    a.id === alert.id ? { ...a, status: 'Triggered' } : a
+                                  );
+                                  // Ensure subsequent triggers in this same tick build on the latest updates
+                                  allAlerts = updatedAlerts;
+                                  setAlerts(updatedAlerts);
+
+                                  // Persist immediately as this runs inside a WebSocket callback
+                                  localStorage.setItem('tv_alerts', JSON.stringify(updatedAlerts));
+
+                                  // Play alarm sound
+                                  playAlertSound();
+
+                                  // Always show a popup notification (including when on the current chart)
+                                  setGlobalAlertPopups(prev => [{
+                                    id: `popup-${crypto.randomUUID()}-${alert.id}`,
+                                    alertId: alert.id,
+                                    symbol: ticker.symbol,
+                                    exchange: ticker.exchange || 'NSE',
+                                    price: indicatorValue.toFixed(2),
+                                    direction: popupDirection,
+                                    timestamp: Date.now()
+                                  }, ...prev].slice(0, 5));
+
+                                  setAlertLogs(prev => [{
+                                    id: crypto.randomUUID(),
+                                    alertId: alert.id,
+                                    symbol: ticker.symbol,
+                                    exchange: ticker.exchange || 'NSE',
+                                    message: `Alert: ${ticker.symbol} crossed ${popupDirection === 'up' ? 'above' : 'below'} ${alert.indicator} (${indicatorValue.toFixed(2)})`,
+                                    time: new Date().toISOString()
+                                  }, ...prev]);
+                                  setUnreadAlertCount(prev => prev + 1);
+                                }
+                              } catch (indErr) {
+                                console.error('Error calculating indicator:', indErr);
+                              }
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            } catch (err) {
+              // Silent fail for indicator alert processing
+              // console.error(err);
             }
 
             // === Original watchlist update logic ===
@@ -1392,10 +1590,14 @@ function AppContent({ isAuthenticated, setIsAuthenticated }) {
 
     try {
       localStorage.setItem('tv_alerts', JSON.stringify(filtered));
+      // Refresh global alert monitor when alerts change (after localStorage is updated)
+      if (isAuthenticated) {
+        globalAlertMonitor.refresh();
+      }
     } catch (error) {
       console.error('Failed to persist alerts:', error);
     }
-  }, [alerts]);
+  }, [alerts, isAuthenticated]);
 
   useEffect(() => {
     const cutoff = Date.now() - ALERT_RETENTION_MS;
@@ -1444,6 +1646,13 @@ function AppContent({ isAuthenticated, setIsAuthenticated }) {
 
   // Watchlist handlers are now provided by useWatchlistHandlers hook
   // Symbol handlers are now provided by useSymbolHandlers hook
+
+  // Handler to open indicator alert dialog (create new)
+  const handleOpenIndicatorAlert = useCallback((indicatorType) => {
+    setIndicatorAlertToEdit(null);
+    setIndicatorAlertInitialIndicator(indicatorType);
+    setIsIndicatorAlertOpen(true);
+  }, []);
 
   // Handle moving indicator up in the list (visually up in panes)
   const handleIndicatorMoveUp = React.useCallback((indicatorId) => {
@@ -2096,6 +2305,7 @@ function AppContent({ isAuthenticated, setIsAuthenticated }) {
             onDrawingsSync={handleDrawingsSync}
             onAlertTriggered={handleChartAlertTriggered}
             onReplayModeChange={handleReplayModeChange}
+            onOHLCDataUpdate={handleOHLCDataUpdate}
             // Common props
             chartType={chartType}
             // indicators={indicators} // Handled per chart now
@@ -2114,6 +2324,7 @@ function AppContent({ isAuthenticated, setIsAuthenticated }) {
             onIndicatorRemove={handleIndicatorRemove}
             onIndicatorVisibilityToggle={handleIndicatorVisibilityToggle}
             onIndicatorSettings={handleIndicatorSettings}
+            onOpenIndicatorAlert={handleOpenIndicatorAlert}
             onIndicatorMoveUp={handleIndicatorMoveUp}
             chartAppearance={chartAppearance}
             onOpenOptionChain={handleOpenOptionChainForSymbol}
@@ -2225,6 +2436,7 @@ function AppContent({ isAuthenticated, setIsAuthenticated }) {
         onClose={() => {
           setIsIndicatorAlertOpen(false);
           setIndicatorAlertToEdit(null);
+          setIndicatorAlertInitialIndicator(null);
         }}
         onSave={handleSaveIndicatorAlert}
         activeIndicators={activeChart?.indicators || []}
@@ -2232,6 +2444,8 @@ function AppContent({ isAuthenticated, setIsAuthenticated }) {
         exchange={indicatorAlertToEdit ? indicatorAlertToEdit.exchange : currentExchange}
         theme={theme}
         alertToEdit={indicatorAlertToEdit}
+        initialIndicator={indicatorAlertInitialIndicator}
+        currentInterval={currentInterval} // Pass current chart interval
       />
       <Suspense fallback={null}>
         {isSettingsOpen && (
