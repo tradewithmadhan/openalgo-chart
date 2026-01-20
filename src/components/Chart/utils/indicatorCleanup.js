@@ -77,19 +77,27 @@ export function cleanupPriceLines(series, priceLineKeys) {
  * @param {Object} pane - The pane containing the series (optional)
  */
 export function removeSingleSeries(series, chart, pane) {
+  console.log('[CLEANUP EXEC] removeSingleSeries called', { series, hasChart: !!chart, hasPane: !!pane });
+
   if (!isValidSeries(series)) {
-    console.warn('Attempted to remove invalid series:', series);
+    console.warn('[CLEANUP EXEC] Attempted to remove invalid series:', series);
     return;
   }
 
   try {
     if (chart && typeof chart.removeSeries === 'function') {
+      console.log('[CLEANUP EXEC] Calling chart.removeSeries');
       chart.removeSeries(series);
+      console.log('[CLEANUP EXEC] Successfully called chart.removeSeries');
     } else if (pane && typeof pane.removeSeries === 'function') {
+      console.log('[CLEANUP EXEC] Calling pane.removeSeries');
       pane.removeSeries(series);
+      console.log('[CLEANUP EXEC] Successfully called pane.removeSeries');
+    } else {
+      console.warn('[CLEANUP EXEC] No valid remove method found', { hasChart: !!chart, hasPane: !!pane });
     }
   } catch (error) {
-    console.warn('Error removing series:', error);
+    console.error('[CLEANUP EXEC] Error removing series:', error);
   }
 }
 
@@ -101,20 +109,30 @@ export function removeSingleSeries(series, chart, pane) {
  * @param {Object} metadata - Indicator metadata with seriesKeys
  */
 export function removeMultiSeries(seriesObj, chart, pane, metadata) {
+  console.log('[CLEANUP EXEC] removeMultiSeries called', {
+    hasSeriesObj: !!seriesObj,
+    seriesObjType: typeof seriesObj,
+    seriesKeys: metadata.seriesKeys
+  });
+
   if (!seriesObj || typeof seriesObj !== 'object') {
+    console.warn('[CLEANUP EXEC] Invalid seriesObj in removeMultiSeries');
     return;
   }
 
   const seriesKeys = metadata.seriesKeys || [];
+  console.log('[CLEANUP EXEC] Processing', seriesKeys.length, 'series keys:', seriesKeys);
 
   seriesKeys.forEach(key => {
     const series = seriesObj[key];
+    console.log(`[CLEANUP EXEC] Processing key "${key}":`, { hasSeries: !!series, isValid: isValidSeries(series) });
     if (series && isValidSeries(series)) {
       removeSingleSeries(series, chart, pane);
     }
   });
 
   // Also try to remove any series not in the keys (fallback)
+  console.log('[CLEANUP EXEC] Processing fallback series from Object.values');
   Object.values(seriesObj).forEach(series => {
     if (isValidSeries(series)) {
       try {
@@ -132,25 +150,40 @@ export function removeMultiSeries(seriesObj, chart, pane, metadata) {
  * @param {Object} chart - The chart instance
  */
 export function removeSeriesArray(arrayOrRef, chart) {
+  console.log('[CLEANUP EXEC] removeSeriesArray called', {
+    hasArrayOrRef: !!arrayOrRef,
+    hasCurrent: !!arrayOrRef?.current,
+    type: typeof arrayOrRef
+  });
+
   // Handle ref object
   const array = arrayOrRef?.current || arrayOrRef;
 
+  console.log('[CLEANUP EXEC] Array extracted:', { isArray: Array.isArray(array), length: array?.length });
+
   if (!Array.isArray(array)) {
+    console.warn('[CLEANUP EXEC] Not an array in removeSeriesArray');
     return;
   }
 
-  array.forEach(series => {
+  console.log('[CLEANUP EXEC] Processing', array.length, 'series in array');
+  array.forEach((series, index) => {
+    console.log(`[CLEANUP EXEC] Array item ${index}:`, { hasSeries: !!series, isValid: isValidSeries(series) });
     if (isValidSeries(series)) {
       removeSingleSeries(series, chart, null);
     }
   });
 
   // Clear the array
+  console.log('[CLEANUP EXEC] Clearing array');
   if (arrayOrRef?.current) {
+    console.log('[CLEANUP EXEC] Clearing array via .current (ref)');
     arrayOrRef.current = [];
   } else if (Array.isArray(arrayOrRef)) {
+    console.log('[CLEANUP EXEC] Clearing array via .length = 0');
     arrayOrRef.length = 0;
   }
+  console.log('[CLEANUP EXEC] Array cleared');
 }
 
 /**
@@ -186,19 +219,24 @@ export function removePrimitive(primitiveRef, mainSeries) {
  * @param {Object} pane - The pane object to remove
  */
 export function removePane(chart, pane) {
+  console.log('[CLEANUP EXEC] removePane called', { hasChart: !!chart, hasPane: !!pane });
+
   if (!chart || !pane) {
+    console.warn('[CLEANUP EXEC] Missing chart or pane in removePane');
     return;
   }
 
   if (!isValidPane(pane)) {
-    console.warn('Attempted to remove invalid pane:', pane);
+    console.warn('[CLEANUP EXEC] Attempted to remove invalid pane:', pane);
     return;
   }
 
   try {
     // Modern API: remove pane by reference
     if (typeof chart.removePane === 'function') {
+      console.log('[CLEANUP EXEC] Calling chart.removePane');
       chart.removePane(pane);
+      console.log('[CLEANUP EXEC] Successfully called chart.removePane');
     }
     // Fallback: remove pane by finding its index
     else if (typeof chart.panes === 'function') {
@@ -222,6 +260,8 @@ export function removePane(chart, pane) {
  * @returns {boolean} True if cleanup was successful
  */
 export function cleanupIndicator(indicatorId, indicatorType, context) {
+  console.log(`[CLEANUP] Starting cleanup for ${indicatorType} (ID: ${indicatorId})`);
+
   if (!indicatorType) {
     console.warn(`Cannot cleanup indicator ${indicatorId}: type is undefined`);
     return false;
@@ -230,9 +270,17 @@ export function cleanupIndicator(indicatorId, indicatorType, context) {
   const metadata = getIndicatorMetadata(indicatorType);
 
   if (!metadata) {
-    console.warn(`No metadata found for indicator type: ${indicatorType}`);
+    console.error(`[CLEANUP] CRITICAL: No metadata found for indicator type: ${indicatorType}`);
+    console.error(`[CLEANUP] Available types:`, Object.keys(indicatorMetadata));
     return false;
   }
+
+  console.log(`[CLEANUP] Metadata for ${indicatorType}:`, {
+    cleanupType: metadata.cleanupType,
+    hasPane: metadata.hasPane,
+    hasPrimitive: metadata.hasPrimitive,
+    hasPriceLines: metadata.hasPriceLines
+  });
 
   const {
     chart,
@@ -245,20 +293,26 @@ export function cleanupIndicator(indicatorId, indicatorType, context) {
   try {
     // STEP 1: Handle primitives first (TPO, Risk Calculator)
     if (metadata.hasPrimitive && metadata.primitiveRef) {
+      console.log(`[CLEANUP] Removing primitive for ${indicatorType}`);
       const primitiveRef = refs[metadata.primitiveRef];
       if (primitiveRef) {
         removePrimitive(primitiveRef, mainSeries);
+        console.log(`[CLEANUP] Primitive removed for ${indicatorType}`);
+      } else {
+        console.warn(`[CLEANUP] Primitive ref not found for ${indicatorType}`);
       }
     }
 
     // STEP 2: Handle array-based indicators (First Candle, Range Breakout, PAR)
     if (metadata.cleanupType === INDICATOR_CLEANUP_TYPES.SERIES_ARRAY) {
+      console.log(`[CLEANUP] Removing series array for ${indicatorType}`);
       if (metadata.arrayRef && refs[metadata.arrayRef]) {
         removeSeriesArray(refs[metadata.arrayRef], chart);
       }
       // Clean up maps
       indicatorSeriesMap.delete(indicatorId);
       indicatorPanesMap.delete(indicatorId);
+      console.log(`[CLEANUP] Series array cleanup complete for ${indicatorType}`);
       return true;
     }
 
@@ -266,29 +320,37 @@ export function cleanupIndicator(indicatorId, indicatorType, context) {
     const series = indicatorSeriesMap.get(indicatorId);
     const pane = indicatorPanesMap.get(indicatorId);
 
+    console.log(`[CLEANUP] Series exists: ${!!series}, Pane exists: ${!!pane}`);
+
     // STEP 4: Remove price lines if present
     if (metadata.hasPriceLines && series) {
+      console.log(`[CLEANUP] Removing price lines for ${indicatorType}`);
       cleanupPriceLines(series, metadata.priceLineKeys || []);
     }
 
     // STEP 5: Remove series based on cleanup type
+    console.log(`[CLEANUP] Removing series with type: ${metadata.cleanupType}`);
     switch (metadata.cleanupType) {
       case INDICATOR_CLEANUP_TYPES.SIMPLE_SERIES:
         removeSingleSeries(series, chart, pane);
+        console.log(`[CLEANUP] Single series removed for ${indicatorType}`);
         break;
 
       case INDICATOR_CLEANUP_TYPES.MULTI_SERIES:
         removeMultiSeries(series, chart, pane, metadata);
+        console.log(`[CLEANUP] Multi-series removed for ${indicatorType}`);
         break;
 
       case INDICATOR_CLEANUP_TYPES.PRIMITIVE:
         // Already handled in STEP 1
+        console.log(`[CLEANUP] Primitive-only cleanup (already handled) for ${indicatorType}`);
         break;
 
       case INDICATOR_CLEANUP_TYPES.COMPLEX:
         // Complex indicators may need custom cleanup
         // For now, treat as multi-series
         removeMultiSeries(series, chart, pane, metadata);
+        console.log(`[CLEANUP] Complex series removed for ${indicatorType}`);
         break;
 
       default:
@@ -299,13 +361,16 @@ export function cleanupIndicator(indicatorId, indicatorType, context) {
 
     // STEP 6: Remove pane if it exists
     if (metadata.hasPane && pane) {
+      console.log(`[CLEANUP] Removing pane for ${indicatorType}`);
       removePane(chart, pane);
+      console.log(`[CLEANUP] Pane removed for ${indicatorType}`);
     }
 
     // STEP 7: Clean up maps
     indicatorSeriesMap.delete(indicatorId);
     indicatorPanesMap.delete(indicatorId);
 
+    console.log(`[CLEANUP] Successfully cleaned up ${indicatorType} (ID: ${indicatorId})`);
     return true;
   } catch (error) {
     console.error(`Error cleaning up indicator ${indicatorId} (${indicatorType}):`, error);
