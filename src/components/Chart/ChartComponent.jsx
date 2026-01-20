@@ -249,6 +249,8 @@ const ChartComponent = forwardRef(({
     const intervalRef = useRef(interval);
     const indicatorsRef = useRef(indicators);
     const isSessionBreakVisibleRef = useRef(isSessionBreakVisible);
+    // LOW FIX ML-13: Add strategyConfigRef to prevent large object closure capture
+    const strategyConfigRef = useRef(strategyConfig);
 
     // Keep refs in sync with props
     useEffect(() => { symbolRef.current = symbol; }, [symbol]);
@@ -256,6 +258,7 @@ const ChartComponent = forwardRef(({
     useEffect(() => { intervalRef.current = interval; }, [interval]);
     useEffect(() => { indicatorsRef.current = indicators; }, [indicators]);
     useEffect(() => { isSessionBreakVisibleRef.current = isSessionBreakVisible; }, [isSessionBreakVisible]);
+    useEffect(() => { strategyConfigRef.current = strategyConfig; }, [strategyConfig]);
 
     // Track previous symbol for alert persistence
     const prevSymbolRef = useRef({ symbol: null, exchange: null });
@@ -2189,6 +2192,7 @@ const ChartComponent = forwardRef(({
                         const strategyExchange = strategyConfig.exchange || 'NFO';
 
                         // Handler for multi-leg real-time updates
+                        // LOW FIX ML-13: Use refs to avoid capturing large objects in closure
                         const handleStrategyTick = (legConfig) => (ticker) => {
                             if (cancelled || !ticker) return;
 
@@ -2198,14 +2202,18 @@ const ChartComponent = forwardRef(({
                             // Update the latest tick for this leg
                             strategyLatestRef.current[legConfig.id] = closePrice;
 
+                            // Use ref to avoid closure capture
+                            const currentStrategyConfig = strategyConfigRef.current;
+                            if (!currentStrategyConfig?.legs) return;
+
                             // Only update chart if all legs have ticks
-                            const allLegsHaveTicks = strategyConfig.legs.every(
+                            const allLegsHaveTicks = currentStrategyConfig.legs.every(
                                 leg => strategyLatestRef.current[leg.id] != null
                             );
                             if (!allLegsHaveTicks) return;
 
                             // Calculate combined price with direction multiplier
-                            const combinedClose = strategyConfig.legs.reduce((sum, leg) => {
+                            const combinedClose = currentStrategyConfig.legs.reduce((sum, leg) => {
                                 const price = strategyLatestRef.current[leg.id];
                                 const multiplier = leg.direction === 'buy' ? 1 : -1;
                                 const qty = leg.quantity || 1;
@@ -2215,7 +2223,9 @@ const ChartComponent = forwardRef(({
                             const currentData = dataRef.current;
                             if (!currentData || currentData.length === 0) return;
 
-                            const intervalSeconds = intervalToSeconds(interval);
+                            // Use ref to avoid closure capture
+                            const currentInterval = intervalRef.current;
+                            const intervalSeconds = intervalToSeconds(currentInterval);
                             if (!Number.isFinite(intervalSeconds) || intervalSeconds <= 0) return;
 
                             const lastIndex = currentData.length - 1;
@@ -2276,6 +2286,7 @@ const ChartComponent = forwardRef(({
                         });
                     } else {
                         // Regular symbol mode
+                        // LOW FIX ML-13: Use refs to avoid capturing large objects in closure
                         wsRef.current = subscribeToTicker(symbol, exchange, interval, (ticker) => {
                             if (cancelled || !ticker) return;
 
@@ -2290,7 +2301,9 @@ const ChartComponent = forwardRef(({
                             const currentData = dataRef.current;
                             if (!currentData || currentData.length === 0) return;
 
-                            const intervalSeconds = intervalToSeconds(interval);
+                            // Use ref to avoid closure capture
+                            const currentInterval = intervalRef.current;
+                            const intervalSeconds = intervalToSeconds(currentInterval);
                             if (!Number.isFinite(intervalSeconds) || intervalSeconds <= 0) return;
 
                             const lastIndex = currentData.length - 1;
