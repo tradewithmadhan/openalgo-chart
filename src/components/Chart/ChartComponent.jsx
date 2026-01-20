@@ -126,11 +126,14 @@ const ChartComponent = forwardRef(({
     useChartAlerts(lineToolManager, symbol, exchange);
 
     // Close context menu on click outside
+    // MEDIUM FIX ML-7: Remove early return to prevent event listener memory leak
     useEffect(() => {
-        if (!contextMenu.show) return;
-        const handleClickAway = () => setContextMenu({ show: false, x: 0, y: 0 });
-        document.addEventListener('click', handleClickAway);
-        return () => document.removeEventListener('click', handleClickAway);
+        if (contextMenu.show) {
+            const handleClickAway = () => setContextMenu({ show: false, x: 0, y: 0 });
+            document.addEventListener('click', handleClickAway);
+            return () => document.removeEventListener('click', handleClickAway);
+        }
+        // When show is false, no listener is added, and cleanup won't be needed
     }, [contextMenu.show]);
 
     const isActuallyLoadingRef = useRef(true); // Track if we're actually loading data (not just updating indicators) - start as true on mount
