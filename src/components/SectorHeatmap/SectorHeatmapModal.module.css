@@ -66,6 +66,12 @@
   gap: 24px;
 }
 
+.headerRight {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
 .title {
   margin: 0;
   font-size: 18px;
@@ -112,6 +118,46 @@
   font-size: 14px;
   font-weight: 700;
   font-family: 'Roboto Mono', 'SF Mono', monospace;
+}
+
+/* Data Source Toggle */
+.dataSourceToggle {
+  display: flex;
+  gap: 4px;
+  background: var(--tv-color-toolbar-button-background-hover);
+  border-radius: 8px;
+  padding: 4px;
+}
+
+.sourceButton {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--tv-color-text-secondary);
+  background: transparent;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  white-space: nowrap;
+}
+
+.sourceButton:hover {
+  color: var(--tv-color-text-primary);
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.sourceButtonActive {
+  color: #ffffff;
+  background: var(--tv-color-brand);
+  box-shadow: 0 2px 8px rgba(41, 98, 255, 0.3);
+}
+
+.sourceButtonActive:hover {
+  background: #3d74ff;
 }
 
 .closeButton {

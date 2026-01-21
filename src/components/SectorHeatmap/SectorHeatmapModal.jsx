@@ -1,8 +1,8 @@
 import React, { useMemo, useState, useRef, useEffect, useCallback } from 'react';
-import { X, Grid3X3, LayoutGrid, BarChart3, TrendingUp, TrendingDown } from 'lucide-react';
+import { X, Grid3X3, LayoutGrid, BarChart3, TrendingUp, TrendingDown, List } from 'lucide-react';
 import styles from './SectorHeatmapModal.module.css';
 import { SECTORS, getSector } from '../PositionTracker/sectorMapping';
-import { getMarketCap } from '../../services/marketCapService';
+import { getMarketCap, getAllMarketData } from '../../services/marketCapService';
 
 // Import extracted constants and utils
 import { HEATMAP_MODES } from './constants';
@@ -10,6 +10,7 @@ import { calculateIntradayChange, getChangeColor, getTextColor, getBarWidth, for
 
 const SectorHeatmapModal = ({ isOpen, onClose, watchlistData, onSectorSelect, onSymbolSelect }) => {
   const [activeMode, setActiveMode] = useState('treemap');
+  const [dataSource, setDataSource] = useState('watchlist'); // 'watchlist' or 'market'
   const [hoveredStock, setHoveredStock] = useState(null);
   const [containerSize, setContainerSize] = useState({ width: 0, height: 0 });
   const resizeObserverRef = useRef(null);
@@ -58,8 +59,24 @@ const SectorHeatmapModal = ({ isOpen, onClose, watchlistData, onSectorSelect, on
     };
   }, []);
 
-  // Process stock data with real market cap data
+  // Process stock data - either from watchlist or full market data
   const stockData = useMemo(() => {
+    if (dataSource === 'market') {
+      // Use all 207 stocks from market cap data (TradingView style)
+      const allMarketData = getAllMarketData();
+      return allMarketData.map(item => ({
+        symbol: item.symbol,
+        exchange: 'NSE',
+        ltp: item.ltp,
+        change: item.change,
+        volume: 0,
+        sector: getSector(item.symbol),
+        marketCap: item.marketCap,
+        hasRealMarketCap: true,
+      }));
+    }
+
+    // Use watchlist data
     if (!watchlistData || watchlistData.length === 0) return [];
     return watchlistData.map(item => {
       // Try to get real market cap data from service
@@ -77,7 +94,7 @@ const SectorHeatmapModal = ({ isOpen, onClose, watchlistData, onSectorSelect, on
         hasRealMarketCap: !!realMarketCap, // Flag to indicate if real data is used
       };
     });
-  }, [watchlistData]);
+  }, [watchlistData, dataSource]);
 
   // Calculate sector-wise performance
   const sectorData = useMemo(() => {
@@ -482,9 +499,30 @@ const SectorHeatmapModal = ({ isOpen, onClose, watchlistData, onSectorSelect, on
               </div>
             </div>
           </div>
-          <button className={styles.closeButton} onClick={onClose}>
-            <X size={20} />
-          </button>
+          <div className={styles.headerRight}>
+            {/* Data Source Selector */}
+            <div className={styles.dataSourceToggle}>
+              <button
+                className={`${styles.sourceButton} ${dataSource === 'watchlist' ? styles.sourceButtonActive : ''}`}
+                onClick={() => setDataSource('watchlist')}
+                title="Show watchlist stocks only"
+              >
+                <List size={14} />
+                <span>Watchlist</span>
+              </button>
+              <button
+                className={`${styles.sourceButton} ${dataSource === 'market' ? styles.sourceButtonActive : ''}`}
+                onClick={() => setDataSource('market')}
+                title="Show all market stocks (207 stocks)"
+              >
+                <BarChart3 size={14} />
+                <span>Market</span>
+              </button>
+            </div>
+            <button className={styles.closeButton} onClick={onClose}>
+              <X size={20} />
+            </button>
+          </div>
         </div>
 
         {/* Mode Tabs */}
