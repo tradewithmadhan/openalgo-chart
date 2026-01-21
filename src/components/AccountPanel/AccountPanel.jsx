@@ -80,17 +80,16 @@ const AccountPanel = ({
     });
     const [showPositionsFilters, setShowPositionsFilters] = useState(false);
 
+    // Local state for positions with real-time LTP updates
+    const [positions, setPositions] = useState(contextPositions);
+
+    // Sync local positions with context when context updates
+    useEffect(() => {
+        setPositions(contextPositions);
+    }, [contextPositions]);
+
     // Use context data directly (OrderContext provides all data)
     const funds = contextFunds;
-    // Local state for positions to allow real-time updates via WebSocket
-    const [positions, setPositions] = useState([]);
-
-    // Sync local positions with context positions when context updates
-    useEffect(() => {
-        if (contextPositions) {
-            setPositions(contextPositions);
-        }
-    }, [contextPositions]);
 
     const orders = { orders: contextOrders, statistics: {} }; // Wrap for compatibility
     const holdings = { holdings: contextHoldings, statistics: {} }; // Wrap for compatibility
@@ -101,14 +100,17 @@ const AccountPanel = ({
 
     // Unified positions search logic
     const uniquePositionsExchanges = useMemo(() => {
+        if (!Array.isArray(positions)) return [];
         return [...new Set(positions.map(p => p.exchange).filter(Boolean))];
     }, [positions]);
 
     const uniquePositionsProducts = useMemo(() => {
+        if (!Array.isArray(positions)) return [];
         return [...new Set(positions.map(p => p.product).filter(Boolean))];
     }, [positions]);
 
     const filteredPositions = useMemo(() => {
+        if (!Array.isArray(positions)) return [];
         return positions.filter(p => {
             const matchesSearch = !positionsSearchTerm ||
                 p.symbol?.toLowerCase().includes(positionsSearchTerm.toLowerCase());
@@ -263,7 +265,8 @@ const AccountPanel = ({
     }, [isOpen, isAuthenticated, positions.map(p => `${p.symbol}-${p.exchange}`).join(',')]);
 
     // Calculate P&L summary - prefer broker's official P&L, fallback to manual calculation
-    const calculatePnLSummary = () => {
+    // Memoized to avoid recalculation on every render
+    const { unrealizedPnL, realizedPnL } = useMemo(() => {
         // Extract broker's official P&L fields from funds
         const brokerRealizedPnL = parseFloat(funds?.m2mrealized || 0);
         const brokerUnrealizedPnL = parseFloat(funds?.m2munrealized || 0);
@@ -330,18 +333,18 @@ const AccountPanel = ({
             ? brokerRealizedPnL
             : manualRealizedPnL;
 
-        // Log for debugging
-        console.log('[AccountPanel] P&L Calculation:', {
-            broker: { realized: brokerRealizedPnL, unrealized: brokerUnrealizedPnL },
-            manual: { realized: manualRealizedPnL, unrealized: manualUnrealizedPnL },
-            used: { realized: realizedPnL, unrealized: unrealizedPnL },
-            source: (funds?.m2mrealized !== undefined) ? 'broker' : 'manual'
-        });
+        // Log for debugging (only when P&L actually changes)
+        // Removed excessive logging to improve performance
+        // Uncomment below for debugging if needed:
+        // console.log('[AccountPanel] P&L Calculation:', {
+        //     broker: { realized: brokerRealizedPnL, unrealized: brokerUnrealizedPnL },
+        //     manual: { realized: manualRealizedPnL, unrealized: manualUnrealizedPnL },
+        //     used: { realized: realizedPnL, unrealized: unrealizedPnL },
+        //     source: (funds?.m2mrealized !== undefined) ? 'broker' : 'manual'
+        // });
 
         return { unrealizedPnL, realizedPnL };
-    };
-
-    const { unrealizedPnL, realizedPnL } = calculatePnLSummary();
+    }, [funds, positions, trades]);
 
     // Extract additional margin information
     const availableMargin = parseFloat(funds?.availablecash || 0);

@@ -201,6 +201,8 @@ function AppContent({ isAuthenticated, setIsAuthenticated }) {
   // Toast management (extracted to hook for cleaner code)
   const { toasts, snapshotToast, showToast, removeToast, showSnapshotToast } = useToastManager(3);
 
+
+
   const [isAlertOpen, setIsAlertOpen] = useState(false);
   const [alertPrice, setAlertPrice] = useState(null);
   const [isIndicatorAlertOpen, setIsIndicatorAlertOpen] = useState(false);
@@ -763,6 +765,7 @@ function AppContent({ isAuthenticated, setIsAuthenticated }) {
   const [isReplayMode, setIsReplayMode] = useState(false);
   const [isDrawingsLocked, setIsDrawingsLocked] = useState(false);
   const [isDrawingsHidden, setIsDrawingsHidden] = useState(false);
+  const [isSequentialMode, setIsSequentialMode] = useState(false); // Sequential drawing mode - keeps tool active after use
   const [isTimerVisible, setIsTimerVisible] = useLocalStorage('oa_timer_visible', false);
   const [isSessionBreakVisible, setIsSessionBreakVisible] = useLocalStorage('oa_session_break_visible', false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
@@ -822,7 +825,9 @@ function AppContent({ isAuthenticated, setIsAuthenticated }) {
     currentSymbol,
     showToast,
     showSnapshotToast,
-    requestConfirm
+    requestConfirm,
+    isSequentialMode,
+    setIsSequentialMode
   });
 
   // UI handlers extracted to hook
@@ -885,7 +890,17 @@ function AppContent({ isAuthenticated, setIsAuthenticated }) {
   // Cleanup on unmount to prevent memory leak from orphaned interval
   useEffect(() => {
     initTimeService();
-    return () => destroyTimeService();
+
+    // Add beforeunload handler for page refresh/close scenarios (CRITICAL FIX ML-1)
+    const handleBeforeUnload = () => {
+      destroyTimeService();
+    };
+    window.addEventListener('beforeunload', handleBeforeUnload);
+
+    return () => {
+      destroyTimeService();
+      window.removeEventListener('beforeunload', handleBeforeUnload);
+    };
   }, []);
 
   // Persist multiple watchlists
@@ -1126,8 +1141,10 @@ function AppContent({ isAuthenticated, setIsAuthenticated }) {
         console.log('Fetching fresh quotes for', symbolObjs.length, 'symbols');
         logger.debug('[Watchlist] Fetching fresh quotes for all', symbolObjs.length, 'symbols');
         const fetchPromises = symbolObjs.map(fetchSymbol);
-        const results = await Promise.all(fetchPromises);
-        const validResults = results.filter(r => r !== null);
+        const results = await Promise.allSettled(fetchPromises);
+        const validResults = results
+          .filter(r => r.status === 'fulfilled' && r.value !== null)
+          .map(r => r.value);
 
         console.log('=== API RESULTS ===');
         console.log('Total results:', results.length, 'Valid results:', validResults.length);
@@ -1524,8 +1541,10 @@ function AppContent({ isAuthenticated, setIsAuthenticated }) {
       });
 
       const promises = addedSymbolObjs.map(fetchSymbol);
-      const results = await Promise.all(promises);
-      const validResults = results.filter(r => r !== null);
+      const results = await Promise.allSettled(promises);
+      const validResults = results
+        .filter(r => r.status === 'fulfilled' && r.value !== null)
+        .map(r => r.value);
 
       if (mounted && validResults.length > 0) {
         setWatchlistData(prev => [...prev, ...validResults]);
@@ -2030,6 +2049,7 @@ function AppContent({ isAuthenticated, setIsAuthenticated }) {
             isDrawingsLocked={isDrawingsLocked}
             isDrawingsHidden={isDrawingsHidden}
             isTimerVisible={isTimerVisible}
+            isSequentialMode={isSequentialMode}
           />
         }
         drawingPropertiesPanel={
