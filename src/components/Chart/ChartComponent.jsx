@@ -1527,8 +1527,18 @@ const ChartComponent = forwardRef(({
                 // But don't trigger onToolUsed for zoom tools since they handle their own state
                 const isZoomTool = activeToolRef.current === 'zoom_in' || activeToolRef.current === 'zoom_out';
                 if ((tool === 'None' || tool === null) && activeToolRef.current !== null && activeToolRef.current !== 'cursor' && !isZoomTool) {
-
+                    const finishedTool = activeToolRef.current;
                     if (onToolUsed) onToolUsed();
+
+                    // Support for Sequential Mode:
+                    // If activeTool is NOT reset by onToolUsed (i.e. we are in sequential mode),
+                    // we need to re-activate the tool on the manager because the manager self-resets to None.
+                    setTimeout(() => {
+                        if (activeToolRef.current === finishedTool && lineToolManagerRef.current) {
+                            const mappedTool = TOOL_MAP[finishedTool] || 'None';
+                            lineToolManagerRef.current.startTool(mappedTool);
+                        }
+                    }, 0);
                 }
             };
 
