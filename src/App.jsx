@@ -9,17 +9,19 @@ import SymbolSearch from './components/SymbolSearch/SymbolSearch';
 import Toast from './components/Toast/Toast';
 import SnapshotToast from './components/Toast/SnapshotToast';
 import html2canvas from 'html2canvas';
-import { getTickerPrice, subscribeToMultiTicker, checkAuth, closeAllWebSockets, forceCloseAllWebSockets, saveUserPreferences, modifyOrder, cancelOrder } from './services/openalgo';
+import { getTickerPrice, subscribeToMultiTicker, checkAuth, closeAllWebSockets, forceCloseAllWebSockets, saveUserPreferences, modifyOrder, cancelOrder, getKlines } from './services/openalgo';
 import { globalAlertMonitor } from './services/globalAlertMonitor';
 
 import BottomBar from './components/BottomBar/BottomBar';
 import ChartGrid from './components/Chart/ChartGrid';
 import AlertDialog from './components/Alert/AlertDialog';
+import IndicatorAlertDialog from './components/IndicatorAlert/IndicatorAlertDialog';
 import RightToolbar from './components/Toolbar/RightToolbar';
 import AlertsPanel from './components/Alerts/AlertsPanel';
 import ApiKeyDialog from './components/ApiKeyDialog/ApiKeyDialog';
 import MobileNav from './components/MobileNav';
 import LayoutTemplateDialog from './components/LayoutTemplates/LayoutTemplateDialog';
+import ConfirmDialog from './components/ConfirmDialog';
 
 // Lazy load heavy modal components for better initial load performance
 const SettingsPopup = lazy(() => import('./components/Settings/SettingsPopup'));
@@ -41,7 +43,9 @@ import { useLayoutHandlers } from './hooks/useLayoutHandlers';
 import { useAlertHandlers } from './hooks/useAlertHandlers';
 import { useToolHandlers } from './hooks/useToolHandlers';
 import { useUIHandlers } from './hooks/useUIHandlers';
+import { useIndicatorAlertHandlers } from './hooks/useIndicatorAlertHandlers';
 import { useANNScanner } from './hooks/useANNScanner';
+import { useToastManager } from './hooks/useToastManager';
 import { useTheme } from './context/ThemeContext';
 import { useUser } from './context/UserContext';
 import { OrderProvider } from './context/OrderContext';
@@ -52,8 +56,10 @@ import PositionTracker from './components/PositionTracker';
 import GlobalAlertPopup from './components/GlobalAlertPopup/GlobalAlertPopup';
 import AccountPanel from './components/AccountPanel';
 import TradingPanel from './components/TradingPanel/TradingPanel';
+import OrderEntryModal from './components/OrderEntryModal/OrderEntryModal';
 import ObjectTreePanel from './components/ObjectTree/ObjectTreePanel';
 import MarketScreenerPanel from './components/MarketScreener/MarketScreenerPanel';
+import CompareOptionsDialog from './components/Chart/CompareOptionsDialog';
 
 // Lazy load additional heavy components
 const SectorHeatmapModal = lazy(() => import('./components/SectorHeatmap').then(m => ({ default: m.SectorHeatmapModal })));
@@ -178,6 +184,9 @@ function AppContent({ isAuthenticated, setIsAuthenticated }) {
   const [isSearchOpen, setIsSearchOpen] = useState(false);
   const [searchMode, setSearchMode] = useState('switch'); // 'switch' or 'add'
   const [initialSearchValue, setInitialSearchValue] = useState('');
+  // Compare options dialog state
+  const [compareOptionsVisible, setCompareOptionsVisible] = useState(false);
+  const [pendingComparisonSymbol, setPendingComparisonSymbol] = useState(null);
   const [isCommandPaletteOpen, setIsCommandPaletteOpen] = useState(false);
   const [isTemplateDialogOpen, setIsTemplateDialogOpen] = useState(false);
   const [isShortcutsDialogOpen, setIsShortcutsDialogOpen] = useState(false);
@@ -188,85 +197,17 @@ function AppContent({ isAuthenticated, setIsAuthenticated }) {
   // strategyConfig is now per-chart, stored in charts[].strategyConfig
   const [isOptionChainOpen, setIsOptionChainOpen] = useState(false);
   const [optionChainInitialSymbol, setOptionChainInitialSymbol] = useState(null);
-  // const [indicators, setIndicators] = useState({ sma: false, ema: false }); // Moved to charts state
-  const [toasts, setToasts] = useState([]);
-  const toastIdCounter = React.useRef(0);
-  const MAX_TOASTS = 3;
 
-  const [snapshotToast, setSnapshotToast] = useState(null);
+  // Toast management (extracted to hook for cleaner code)
+  const { toasts, snapshotToast, showToast, removeToast, showSnapshotToast } = useToastManager(3);
 
-  // Toast timeout refs for cleanup
-  const snapshotToastTimeoutRef = React.useRef(null);
-  const toastTimeoutsRef = React.useRef(new Map()); // Track timeout IDs for each toast
 
-  // Show toast helper with queue management - defined early for use in hooks
-  const showToast = (message, type = 'error', action = null) => {
-    const id = ++toastIdCounter.current;
-    const newToast = { id, message, type, action };
-
-    setToasts(prev => {
-      // Add new toast, limit to MAX_TOASTS (oldest removed first)
-      const updated = [...prev, newToast];
-      if (updated.length > MAX_TOASTS) {
-        // Clear timeouts for removed toasts
-        const removedToasts = prev.slice(0, prev.length - MAX_TOASTS + 1);
-        removedToasts.forEach(toast => {
-          const timeoutId = toastTimeoutsRef.current.get(toast.id);
-          if (timeoutId) {
-            clearTimeout(timeoutId);
-            toastTimeoutsRef.current.delete(toast.id);
-          }
-        });
-        return updated.slice(-MAX_TOASTS);
-      }
-      return updated;
-    });
-
-    // Auto-remove after 5 seconds (Phase 4.2: store timeout ID for cleanup)
-    const timeoutId = setTimeout(() => {
-      setToasts(prev => prev.filter(t => t.id !== id));
-      toastTimeoutsRef.current.delete(id);
-    }, 5000);
-    toastTimeoutsRef.current.set(id, timeoutId);
-  };
-
-  // Remove a specific toast
-  const removeToast = (id) => {
-    // Clear associated timeout
-    const timeoutId = toastTimeoutsRef.current.get(id);
-    if (timeoutId) {
-      clearTimeout(timeoutId);
-      toastTimeoutsRef.current.delete(id);
-    }
-    setToasts(prev => prev.filter(t => t.id !== id));
-  };
-
-  const showSnapshotToast = (message) => {
-    if (snapshotToastTimeoutRef.current) {
-      clearTimeout(snapshotToastTimeoutRef.current);
-    }
-    setSnapshotToast(message);
-    snapshotToastTimeoutRef.current = setTimeout(() => setSnapshotToast(null), 3000);
-  };
-
-  // Cleanup all toast timeouts on unmount (Phase 4.2)
-  useEffect(() => {
-    return () => {
-      // Clear all toast timeouts
-      toastTimeoutsRef.current.forEach(timeoutId => {
-        clearTimeout(timeoutId);
-      });
-      toastTimeoutsRef.current.clear();
-
-      // Clear snapshot toast timeout
-      if (snapshotToastTimeoutRef.current) {
-        clearTimeout(snapshotToastTimeoutRef.current);
-      }
-    };
-  }, []);
 
   const [isAlertOpen, setIsAlertOpen] = useState(false);
   const [alertPrice, setAlertPrice] = useState(null);
+  const [isIndicatorAlertOpen, setIsIndicatorAlertOpen] = useState(false);
+  const [indicatorAlertToEdit, setIndicatorAlertToEdit] = useState(null);
+  const [indicatorAlertInitialIndicator, setIndicatorAlertInitialIndicator] = useState(null);
 
   // Alert State (persisted with 24h retention)
   const [alerts, setAlerts] = useState(() => {
@@ -280,6 +221,14 @@ function AppContent({ isAuthenticated, setIsAuthenticated }) {
   });
   const alertsRef = React.useRef(alerts); // Ref to avoid race condition in WebSocket callback
   React.useEffect(() => { alertsRef.current = alerts; }, [alerts]);
+
+  const { handleSaveIndicatorAlert } = useIndicatorAlertHandlers({
+    setAlerts,
+    showToast,
+    setIsIndicatorAlertOpen,
+    setIndicatorAlertToEdit,
+    indicatorAlertToEdit
+  });
 
   const [alertLogs, setAlertLogs] = useState(() => {
     const saved = safeParseJSON(localStorage.getItem('tv_alert_logs'), []);
@@ -295,20 +244,54 @@ function AppContent({ isAuthenticated, setIsAuthenticated }) {
   // Global alert popup state (for background alert notifications)
   const [globalAlertPopups, setGlobalAlertPopups] = useState([]);
 
-  // === GlobalAlertMonitor: DISABLED ===
-  // Background price monitoring is disabled because OpenAlgo only supports
-  // one WebSocket connection per API key. The GlobalAlertMonitor was creating
-  // a second connection that conflicted with the watchlist WebSocket.
-  // 
-  // Alert PERSISTENCE still works - alerts are saved/restored per symbol.
-  // Background MONITORING would require reusing the existing watchlist WebSocket.
-  // 
-  // useEffect(() => {
-  //   if (!isAuthenticated) return;
-  //   const handleBackgroundAlertTrigger = (evt) => { ... };
-  //   globalAlertMonitor.start(handleBackgroundAlertTrigger);
-  //   return () => { globalAlertMonitor.stop(); };
-  // }, [isAuthenticated]);
+  // === GlobalAlertMonitor ===
+  // Background price monitoring using SharedWebSocket
+  useEffect(() => {
+    if (!isAuthenticated) return;
+
+    const handleBackgroundAlertTrigger = (evt) => {
+      const msg = evt.message || `${evt.symbol} alert triggered`;
+      showToast(msg, 'info');
+
+      // Update logs
+      setAlertLogs(prev => {
+        const newLog = {
+          id: evt.alertId || crypto.randomUUID(),
+          time: new Date().toISOString(),
+          message: msg,
+          symbol: evt.symbol,
+          price: evt.currentPrice,
+          type: evt.alertType || 'price'
+        };
+        const updated = [newLog, ...prev].slice(0, 100); // Keep last 100
+        localStorage.setItem('tv_alert_logs', JSON.stringify(updated));
+        return updated;
+      });
+
+      setUnreadAlertCount(c => c + 1);
+
+      // Add to popup queue for visual notification
+      setGlobalAlertPopups(prev => [...prev, { ...evt, id: evt.alertId || crypto.randomUUID() }]);
+    };
+
+    // Load alerts and start monitoring
+    // Small delay to ensure other services are ready
+    const timer = setTimeout(() => {
+      globalAlertMonitor.start(handleBackgroundAlertTrigger);
+    }, 1000);
+
+    return () => {
+      clearTimeout(timer);
+      globalAlertMonitor.stop();
+    };
+  }, [isAuthenticated, showToast]);
+
+  // Handler to share OHLC data with GlobalAlertMonitor for indicator alerts
+  const handleOHLCDataUpdate = useCallback((symbol, exchange, interval, ohlcData) => {
+    if (symbol && exchange && interval && ohlcData && Array.isArray(ohlcData) && ohlcData.length > 0) {
+      globalAlertMonitor.updateOHLCData(symbol, exchange, interval, ohlcData);
+    }
+  }, []);
 
   // Mobile State
   const isMobile = useIsMobile();
@@ -357,6 +340,13 @@ function AppContent({ isAuthenticated, setIsAuthenticated }) {
   // Right Panel State
   const [activeRightPanel, setActiveRightPanel] = useState('watchlist');
 
+  // Trading Panel initial values (from context menu)
+  const [tradingPanelConfig, setTradingPanelConfig] = useState({
+    action: 'BUY',
+    price: '',
+    orderType: 'MARKET'
+  });
+
   // Position Tracker State
   const [positionTrackerSettings, setPositionTrackerSettings] = useState(() => {
     const saved = safeParseJSON(localStorage.getItem('tv_position_tracker_settings'), null);
@@ -381,6 +371,37 @@ function AppContent({ isAuthenticated, setIsAuthenticated }) {
 
   // ANN Scanner background scan handlers
   const { startAnnScan, cancelAnnScan } = useANNScanner(annScannerState, setAnnScannerState);
+
+  // Confirm Dialog State
+  const [confirmDialogState, setConfirmDialogState] = useState({
+    isOpen: false,
+    title: '',
+    message: '',
+    onConfirm: null,
+    onCancel: null,
+    confirmText: 'Confirm',
+    cancelText: 'Cancel',
+    danger: false
+  });
+
+  const requestConfirm = useCallback(({ title, message, onConfirm, onCancel, confirmText, cancelText, danger }) => {
+    setConfirmDialogState({
+      isOpen: true,
+      title,
+      message,
+      onConfirm: () => {
+        if (onConfirm) onConfirm();
+        setConfirmDialogState(prev => ({ ...prev, isOpen: false }));
+      },
+      onCancel: () => {
+        if (onCancel) onCancel();
+        setConfirmDialogState(prev => ({ ...prev, isOpen: false }));
+      },
+      confirmText,
+      cancelText,
+      danger
+    });
+  }, []);
 
   // Sector Heatmap Modal State
   const [isSectorHeatmapOpen, setIsSectorHeatmapOpen] = useState(false);
@@ -465,13 +486,6 @@ function AppContent({ isAuthenticated, setIsAuthenticated }) {
   }, [drawingDefaults]);
 
   // Order handlers are now provided by useOrderHandlers hook
-
-  // Cleanup toast timeouts on unmount
-  useEffect(() => {
-    return () => {
-      if (snapshotToastTimeoutRef.current) clearTimeout(snapshotToastTimeoutRef.current);
-    };
-  }, []);
 
   // Cleanup all WebSocket connections on app exit (beforeunload)
   // This ensures proper unsubscription like the Python API: client.unsubscribe_ltp() + client.disconnect()
@@ -660,6 +674,46 @@ function AppContent({ isAuthenticated, setIsAuthenticated }) {
     setSearchMode
   });
 
+  // Comparison symbol selection - intercept to show options dialog
+  const handleCompareSymbolSelect = useCallback((symbolData) => {
+    if (searchMode === 'compare') {
+      // Check if symbol already exists (toggle off)
+      const exists = (activeChart?.comparisonSymbols || []).find(c =>
+        c.symbol === symbolData.symbol && c.exchange === symbolData.exchange
+      );
+
+      if (exists) {
+        // Remove existing comparison symbol directly
+        handleSymbolChange(symbolData);
+      } else {
+        // Show options dialog for new comparison symbol
+        setPendingComparisonSymbol(symbolData);
+        setCompareOptionsVisible(true);
+      }
+    } else {
+      // Normal symbol change (not compare mode)
+      handleSymbolChange(symbolData);
+    }
+  }, [searchMode, activeChart, handleSymbolChange]);
+
+  // Handle compare options confirmation
+  const handleCompareOptionsConfirm = useCallback((scaleMode) => {
+    if (pendingComparisonSymbol) {
+      handleSymbolChange({
+        ...pendingComparisonSymbol,
+        scaleMode
+      });
+    }
+    setCompareOptionsVisible(false);
+    setPendingComparisonSymbol(null);
+  }, [pendingComparisonSymbol, handleSymbolChange]);
+
+  // Handle compare options cancel
+  const handleCompareOptionsCancel = useCallback(() => {
+    setCompareOptionsVisible(false);
+    setPendingComparisonSymbol(null);
+  }, []);
+
   // Layout handlers extracted to hook
   const {
     handleLayoutChange,
@@ -769,7 +823,8 @@ function AppContent({ isAuthenticated, setIsAuthenticated }) {
     setIsReplayMode,
     currentSymbol,
     showToast,
-    showSnapshotToast
+    showSnapshotToast,
+    requestConfirm
   });
 
   // UI handlers extracted to hook
@@ -1192,7 +1247,7 @@ function AppContent({ isAuthenticated, setIsAuthenticated }) {
                     if (!isOnCurrentChart) {
                       // Add to global alert popup (for background alerts)
                       setGlobalAlertPopups(prev => [{
-                        id: `popup-${Date.now()}-${alert.id}`,
+                        id: `popup-${crypto.randomUUID()}-${alert.id}`,
                         alertId: alert.id,
                         symbol: ticker.symbol,
                         exchange: ticker.exchange || 'NSE',
@@ -1204,7 +1259,7 @@ function AppContent({ isAuthenticated, setIsAuthenticated }) {
 
                     // Log entry
                     setAlertLogs(prev => [{
-                      id: Date.now(),
+                      id: crypto.randomUUID(),
                       alertId: alert.id,
                       symbol: ticker.symbol,
                       exchange: ticker.exchange || 'NSE',
@@ -1217,6 +1272,196 @@ function AppContent({ isAuthenticated, setIsAuthenticated }) {
               }
             } catch (err) {
               // Silent fail for alert check
+            }
+
+            // === INDICATOR ALERT MONITORING ===
+            // Check indicator-based alerts using cached OHLC data
+            try {
+              const currentPrice = parseFloat(ticker.last);
+              if (Number.isFinite(currentPrice)) {
+
+                const indicatorAlertsStr = localStorage.getItem('tv_alerts');
+                if (indicatorAlertsStr) {
+                  let allAlerts = JSON.parse(indicatorAlertsStr);
+                  if (Array.isArray(allAlerts)) {
+                    const tickerKey = `${ticker.symbol}:${ticker.exchange || 'NSE'}`;
+
+                    // Filter to active indicator alerts for this symbol
+                    const indicatorAlerts = allAlerts.filter(a =>
+                      a.type === 'indicator' &&
+                      a.status === 'Active' &&
+                      a.symbol === ticker.symbol &&
+                      (a.exchange || 'NSE') === (ticker.exchange || 'NSE')
+                    );
+
+                    if (indicatorAlerts.length > 0) {
+                      if (indicatorAlerts.length > 0) {
+                        // Group alerts by interval to fetch corresponding data
+                        const alertsByInterval = indicatorAlerts.reduce((acc, alert) => {
+                          const interval = alert.interval || '1m';
+                          if (!acc[interval]) acc[interval] = [];
+                          acc[interval].push(alert);
+                          return acc;
+                        }, {});
+
+                        // Process each interval group
+                        for (const [interval, alerts] of Object.entries(alertsByInterval)) {
+                          const ohlcData = globalAlertMonitor._getOHLCData(ticker.symbol, ticker.exchange || 'NSE', interval);
+
+                          if (ohlcData && ohlcData.length > 0) {
+                            for (const alert of alerts) {
+                              try {
+                                const indicatorType = (alert.indicator || '').toLowerCase();
+                                const condition = alert.condition;
+
+                                if (!condition || !condition.type) continue;
+
+                                let indicatorValue = null;
+                                const period = condition.value || 20;
+
+                                // Helper functions for indicator calculations
+                                const calcSMA = (data, len) => {
+                                  if (data.length < len) return null;
+                                  return data.slice(-len).reduce((a, b) => a + b, 0) / len;
+                                };
+
+                                const calcEMA = (data, len) => {
+                                  if (data.length < len) return null;
+                                  const multiplier = 2 / (len + 1);
+                                  let ema = data.slice(0, len).reduce((a, b) => a + b, 0) / len;
+                                  for (let i = len; i < data.length; i++) {
+                                    ema = (data[i] - ema) * multiplier + ema;
+                                  }
+                                  return ema;
+                                };
+
+                                const closes = ohlcData.map(bar => bar.close);
+                                const highs = ohlcData.map(bar => bar.high);
+                                const lows = ohlcData.map(bar => bar.low);
+
+                                if (indicatorType === 'ema') {
+                                  indicatorValue = calcEMA(closes, period);
+                                } else if (indicatorType === 'sma') {
+                                  indicatorValue = calcSMA(closes, period);
+                                } else if (indicatorType === 'rsi') {
+                                  const rsiPeriod = period || 14;
+                                  if (closes.length >= rsiPeriod + 1) {
+                                    let gains = 0, losses = 0;
+                                    for (let i = closes.length - rsiPeriod; i < closes.length; i++) {
+                                      const diff = closes[i] - closes[i - 1];
+                                      if (diff > 0) gains += diff;
+                                      else losses -= diff;
+                                    }
+                                    const avgGain = gains / rsiPeriod;
+                                    const avgLoss = losses / rsiPeriod;
+                                    indicatorValue = avgLoss === 0 ? 100 : 100 - (100 / (1 + avgGain / avgLoss));
+                                  }
+                                } else if (indicatorType === 'stochastic') {
+                                  const stochPeriod = period || 14;
+                                  if (closes.length >= stochPeriod) {
+                                    const recentHighs = highs.slice(-stochPeriod);
+                                    const recentLows = lows.slice(-stochPeriod);
+                                    const highestHigh = Math.max(...recentHighs);
+                                    const lowestLow = Math.min(...recentLows);
+                                    const latestClose = closes[closes.length - 1];
+                                    indicatorValue = highestHigh !== lowestLow
+                                      ? ((latestClose - lowestLow) / (highestHigh - lowestLow)) * 100
+                                      : 50;
+                                  }
+                                }
+
+                                if (indicatorValue === null) continue;
+
+                                // Get previous price for crossing detection
+                                const prevPriceKey = `${tickerKey}:indicator:${alert.id}`;
+                                const prevPrice = alertPricesRef.current.get(prevPriceKey);
+                                alertPricesRef.current.set(prevPriceKey, currentPrice);
+
+                                if (prevPrice === undefined) continue;
+
+                                // Evaluate crossing condition
+                                let triggered = false;
+                                let direction = '';
+
+                                const crossedAbove = prevPrice < indicatorValue && currentPrice >= indicatorValue;
+                                const crossedBelow = prevPrice > indicatorValue && currentPrice <= indicatorValue;
+
+                                const condType = (condition.type || '').toLowerCase();
+                                const condId = (condition.id || '').toLowerCase();
+
+                                if (condType.includes('cross') || condId.includes('cross')) {
+                                  if (condType.includes('above') || condId.includes('above')) {
+                                    triggered = crossedAbove;
+                                    direction = 'above';
+                                  } else if (condType.includes('below') || condId.includes('below')) {
+                                    triggered = crossedBelow;
+                                    direction = 'below';
+                                  } else {
+                                    triggered = crossedAbove || crossedBelow;
+                                    direction = crossedAbove ? 'above' : 'below';
+                                  }
+                                } else if (condType === 'greater_than' || condId === 'greater_than') {
+                                  triggered = currentPrice > indicatorValue;
+                                  direction = 'above';
+                                } else if (condType === 'less_than' || condId === 'less_than') {
+                                  triggered = currentPrice < indicatorValue;
+                                  direction = 'below';
+                                }
+
+                                if (triggered) {
+                                  const popupDirection = direction === 'above' ? 'up' : 'down';
+
+                                  console.log('[Alerts] INDICATOR ALERT TRIGGERED:', ticker.symbol, popupDirection, alert.indicator, indicatorValue);
+
+                                  // Update React state immutably so UI refreshes (Alerts tab status)
+                                  const updatedAlerts = allAlerts.map(a =>
+                                    a.id === alert.id ? { ...a, status: 'Triggered' } : a
+                                  );
+                                  // Ensure subsequent triggers in this same tick build on the latest updates
+                                  allAlerts = updatedAlerts;
+                                  setAlerts(updatedAlerts);
+
+                                  // Persist immediately as this runs inside a WebSocket callback
+                                  localStorage.setItem('tv_alerts', JSON.stringify(updatedAlerts));
+
+                                  // Play alarm sound
+                                  playAlertSound();
+
+                                  // Always show a popup notification (including when on the current chart)
+                                  setGlobalAlertPopups(prev => [{
+                                    id: `popup-${crypto.randomUUID()}-${alert.id}`,
+                                    alertId: alert.id,
+                                    symbol: ticker.symbol,
+                                    exchange: ticker.exchange || 'NSE',
+                                    price: indicatorValue.toFixed(2),
+                                    direction: popupDirection,
+                                    timestamp: Date.now()
+                                  }, ...prev].slice(0, 5));
+
+                                  setAlertLogs(prev => [{
+                                    id: crypto.randomUUID(),
+                                    alertId: alert.id,
+                                    symbol: ticker.symbol,
+                                    exchange: ticker.exchange || 'NSE',
+                                    message: `Alert: ${ticker.symbol} crossed ${popupDirection === 'up' ? 'above' : 'below'} ${alert.indicator} (${indicatorValue.toFixed(2)})`,
+                                    time: new Date().toISOString()
+                                  }, ...prev]);
+                                  setUnreadAlertCount(prev => prev + 1);
+                                }
+                              } catch (indErr) {
+                                console.error('Error calculating indicator:', indErr);
+                              }
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            } catch (err) {
+              // Silent fail for indicator alert processing
+              // console.error(err);
             }
 
             // === Original watchlist update logic ===
@@ -1361,10 +1606,14 @@ function AppContent({ isAuthenticated, setIsAuthenticated }) {
 
     try {
       localStorage.setItem('tv_alerts', JSON.stringify(filtered));
+      // Refresh global alert monitor when alerts change (after localStorage is updated)
+      if (isAuthenticated) {
+        globalAlertMonitor.refresh();
+      }
     } catch (error) {
       console.error('Failed to persist alerts:', error);
     }
-  }, [alerts]);
+  }, [alerts, isAuthenticated]);
 
   useEffect(() => {
     const cutoff = Date.now() - ALERT_RETENTION_MS;
@@ -1413,6 +1662,34 @@ function AppContent({ isAuthenticated, setIsAuthenticated }) {
 
   // Watchlist handlers are now provided by useWatchlistHandlers hook
   // Symbol handlers are now provided by useSymbolHandlers hook
+
+  // Handler to open indicator alert dialog (create new)
+  const handleOpenIndicatorAlert = useCallback((indicatorType) => {
+    setIndicatorAlertToEdit(null);
+    setIndicatorAlertInitialIndicator(indicatorType);
+    setIsIndicatorAlertOpen(true);
+  }, []);
+
+  // Handle moving indicator up in the list (visually up in panes)
+  const handleIndicatorMoveUp = React.useCallback((indicatorId) => {
+    setCharts(prevCharts => prevCharts.map(chart => {
+      if (chart.id !== activeChartId) return chart;
+
+      const indicators = chart.indicators || [];
+      const index = indicators.findIndex(i => i.id === indicatorId);
+
+      // Can't move up if it's the first indicator (index 0) or not found
+      if (index <= 0) return chart;
+
+      const newIndicators = [...indicators];
+      // Swap with previous
+      const temp = newIndicators[index - 1];
+      newIndicators[index - 1] = newIndicators[index];
+      newIndicators[index] = temp;
+
+      return { ...chart, indicators: newIndicators };
+    }));
+  }, [activeChartId]);
 
   const toggleIndicator = (name) => {
     setCharts(prev => prev.map(chart => {
@@ -1547,9 +1824,71 @@ function AppContent({ isAuthenticated, setIsAuthenticated }) {
     redo: handleRedo,
     createAlert: handleAlertClick,
     toggleFullscreen: handleFullScreen,
+
+    // Context Menu Shortcuts
+    resetChartView: () => {
+      const activeRef = chartRefs.current[activeChartId];
+      if (activeRef && typeof activeRef.resetZoom === 'function') {
+        activeRef.resetZoom();
+      }
+    },
+    addAlertAtPrice: () => {
+      // Add alert at current crosshair price
+      const activeRef = chartRefs.current[activeChartId];
+      if (activeRef && typeof activeRef.addAlertAtCrosshair === 'function') {
+        activeRef.addAlertAtCrosshair();
+      } else {
+        // Fallback: open alert dialog
+        handleAlertClick();
+      }
+    },
+    sellLimitOrder: () => {
+      // Open trading panel with SELL pre-filled at crosshair price
+      const activeRef = chartRefs.current[activeChartId];
+      const crosshairPrice = activeRef?.getCrosshairPrice?.();
+      if (crosshairPrice) {
+        setTradingPanelConfig({
+          action: 'SELL',
+          price: crosshairPrice,
+          orderType: 'LIMIT'
+        });
+      }
+    },
+    buyLimitOrder: () => {
+      // Open trading panel with BUY pre-filled at crosshair price
+      const activeRef = chartRefs.current[activeChartId];
+      const crosshairPrice = activeRef?.getCrosshairPrice?.();
+      if (crosshairPrice) {
+        setTradingPanelConfig({
+          action: 'BUY',
+          price: crosshairPrice,
+          orderType: 'LIMIT'
+        });
+      }
+    },
+    addOrder: () => {
+      // Open trading panel at crosshair price
+      const activeRef = chartRefs.current[activeChartId];
+      const crosshairPrice = activeRef?.getCrosshairPrice?.();
+      if (crosshairPrice) {
+        setTradingPanelConfig({
+          action: 'BUY',
+          price: crosshairPrice,
+          orderType: 'LIMIT'
+        });
+      }
+    },
+    drawHorizontalLine: () => {
+      // Draw horizontal line at crosshair price
+      const activeRef = chartRefs.current[activeChartId];
+      if (activeRef && typeof activeRef.drawHorizontalLineAtCrosshair === 'function') {
+        activeRef.drawHorizontalLineAtCrosshair();
+      }
+    },
+    takeScreenshot: handleDownloadImage,
   }), [
     isShortcutsDialogOpen, isCommandPaletteOpen, isSearchOpen, isAlertOpen, isSettingsOpen, isTemplateDialogOpen,
-    handleToolChange, handleUndo, handleRedo, handleAlertClick, handleFullScreen, activeChartId
+    handleToolChange, handleUndo, handleRedo, handleAlertClick, handleFullScreen, activeChartId, chartRefs, setTradingPanelConfig
   ]);
 
   // Determine if any dialog is open (to disable single-key shortcuts)
@@ -1690,6 +2029,10 @@ function AppContent({ isAuthenticated, setIsAuthenticated }) {
 
             strategyConfig={activeChart?.strategyConfig}
             onIndicatorSettingsClick={() => setIsIndicatorSettingsOpen(true)}
+            onIndicatorAlertClick={() => {
+              setIndicatorAlertToEdit(null); // Ensure creation mode
+              setIsIndicatorAlertOpen(true);
+            }}
             onOptionsClick={() => setIsOptionChainOpen(true)}
             onHeatmapClick={() => setIsSectorHeatmapOpen(true)}
           />
@@ -1856,6 +2199,16 @@ function AppContent({ isAuthenticated, setIsAuthenticated }) {
                 ));
               }}
               onEditAlert={(alert) => {
+                if (alert.type === 'indicator') {
+                  setIndicatorAlertToEdit(alert);
+                  setIsIndicatorAlertOpen(true);
+                  // Ensure we are on the correct symbol if needed
+                  setCharts(prev => prev.map(chart =>
+                    chart.id === activeChartId ? { ...chart, symbol: alert.symbol, exchange: alert.exchange || 'NSE', strategyConfig: null } : chart
+                  ));
+                  return;
+                }
+
                 // Navigate to the symbol first
                 setCharts(prev => prev.map(chart =>
                   chart.id === activeChartId ? { ...chart, symbol: alert.symbol, exchange: alert.exchange || 'NSE', strategyConfig: null } : chart
@@ -1943,6 +2296,9 @@ function AppContent({ isAuthenticated, setIsAuthenticated }) {
               isOpen={true}
               onClose={() => setActiveRightPanel('watchlist')}
               showToast={showToast}
+              initialAction={tradingPanelConfig.action}
+              initialPrice={tradingPanelConfig.price}
+              initialOrderType={tradingPanelConfig.orderType}
             />
           ) : null
         }
@@ -1965,6 +2321,7 @@ function AppContent({ isAuthenticated, setIsAuthenticated }) {
             onDrawingsSync={handleDrawingsSync}
             onAlertTriggered={handleChartAlertTriggered}
             onReplayModeChange={handleReplayModeChange}
+            onOHLCDataUpdate={handleOHLCDataUpdate}
             // Common props
             chartType={chartType}
             // indicators={indicators} // Handled per chart now
@@ -1983,21 +2340,64 @@ function AppContent({ isAuthenticated, setIsAuthenticated }) {
             onIndicatorRemove={handleIndicatorRemove}
             onIndicatorVisibilityToggle={handleIndicatorVisibilityToggle}
             onIndicatorSettings={handleIndicatorSettings}
+            onOpenIndicatorAlert={handleOpenIndicatorAlert}
+            onIndicatorMoveUp={handleIndicatorMoveUp}
             chartAppearance={chartAppearance}
             onOpenOptionChain={handleOpenOptionChainForSymbol}
             oiLines={oiLines}
             showOILines={showOILines}
+            onOpenSettings={() => setIsSettingsOpen(true)}
+            onOpenObjectTree={() => setActiveRightPanel('objectTree')}
+            onOpenTradingPanel={(action, price, orderType, isModal = false) => {
+              setTradingPanelConfig({
+                action: action || 'BUY',
+                price: price ? price.toFixed(2) : '',
+                orderType: orderType || 'LIMIT',
+                isModal: isModal
+              });
+              if (!isModal) {
+                setActiveRightPanel('trade');
+              }
+            }}
           />
         }
       />
+      {/* Order Entry Modal (Popup) */}
+      <OrderEntryModal
+        isOpen={tradingPanelConfig.isOpen === undefined ? !!tradingPanelConfig.isModal : (tradingPanelConfig.isOpen && tradingPanelConfig.isModal)} // Logic: if config set and isModal is true
+        // Actually, we need a better way to track "modal open" state.
+        // Let's assume if isModal is true in config, we show it.
+        // But we need to reset it on close.
+        onClose={() => setTradingPanelConfig(prev => ({ ...prev, isModal: false }))}
+        symbol={activeChart.symbol}
+        exchange={activeChart.exchange}
+        showToast={showToast}
+        initialAction={tradingPanelConfig.action}
+        initialPrice={tradingPanelConfig.price}
+        initialOrderType={tradingPanelConfig.orderType}
+      />
+
       <SymbolSearch
         isOpen={isSearchOpen}
         onClose={() => setIsSearchOpen(false)}
-        onSelect={handleSymbolChange}
+        onSelect={handleCompareSymbolSelect}
         addedSymbols={searchMode === 'compare' ? (activeChart.comparisonSymbols || []) : []}
         isCompareMode={searchMode === 'compare'}
         initialValue={initialSearchValue}
         onInitialValueUsed={() => setInitialSearchValue('')}
+      />
+      <CompareOptionsDialog
+        visible={compareOptionsVisible}
+        symbol={pendingComparisonSymbol?.symbol}
+        exchange={pendingComparisonSymbol?.exchange}
+        symbolColor={(() => {
+          // Get the next color for the comparison symbol
+          const colors = ['#f57f17', '#e91e63', '#9c27b0', '#673ab7', '#3f51b5'];
+          const count = (activeChart?.comparisonSymbols || []).length;
+          return colors[count % colors.length];
+        })()}
+        onConfirm={handleCompareOptionsConfirm}
+        onCancel={handleCompareOptionsCancel}
       />
       <Suspense fallback={null}>
         {isCommandPaletteOpen && (
@@ -2046,6 +2446,22 @@ function AppContent({ isAuthenticated, setIsAuthenticated }) {
         onSave={handleSaveAlert}
         initialPrice={alertPrice}
         theme={theme}
+      />
+      <IndicatorAlertDialog
+        isOpen={isIndicatorAlertOpen}
+        onClose={() => {
+          setIsIndicatorAlertOpen(false);
+          setIndicatorAlertToEdit(null);
+          setIndicatorAlertInitialIndicator(null);
+        }}
+        onSave={handleSaveIndicatorAlert}
+        activeIndicators={activeChart?.indicators || []}
+        symbol={indicatorAlertToEdit ? indicatorAlertToEdit.symbol : currentSymbol}
+        exchange={indicatorAlertToEdit ? indicatorAlertToEdit.exchange : currentExchange}
+        theme={theme}
+        alertToEdit={indicatorAlertToEdit}
+        initialIndicator={indicatorAlertInitialIndicator}
+        currentInterval={currentInterval} // Pass current chart interval
       />
       <Suspense fallback={null}>
         {isSettingsOpen && (
@@ -2171,6 +2587,17 @@ function AppContent({ isAuthenticated, setIsAuthenticated }) {
           />
         )}
       </Suspense>
+
+      <ConfirmDialog
+        isOpen={confirmDialogState.isOpen}
+        title={confirmDialogState.title}
+        message={confirmDialogState.message}
+        onConfirm={confirmDialogState.onConfirm}
+        onCancel={confirmDialogState.onCancel}
+        confirmText={confirmDialogState.confirmText}
+        cancelText={confirmDialogState.cancelText}
+        danger={confirmDialogState.danger}
+      />
     </OrderProvider>
   );
 }
@@ -2181,17 +2608,16 @@ function App() {
   const { isAuthenticated, setIsAuthenticated } = useUser();
 
   // Cloud Workspace Sync - blocks until cloud data is fetched or 5s timeout
-  // syncKey changes when cloud data is applied, forcing AppContent remount
-  const { isLoaded: isWorkspaceLoaded, syncKey } = useCloudWorkspaceSync(isAuthenticated);
+  // Store is hydrated directly via setFromCloud, no remount needed
+  const { isLoaded: isWorkspaceLoaded } = useCloudWorkspaceSync(isAuthenticated);
 
   // Show loader while checking auth or loading cloud data
   if (!isWorkspaceLoaded) {
     return <WorkspaceLoader />;
   }
 
-  // Now mount AppContent - localStorage is already updated with cloud data
-  // Using syncKey as React key forces remount when cloud data is applied after login
-  return <AppContent key={syncKey} isAuthenticated={isAuthenticated} setIsAuthenticated={setIsAuthenticated} />;
+  // Now mount AppContent - store is already hydrated with cloud data
+  return <AppContent isAuthenticated={isAuthenticated} setIsAuthenticated={setIsAuthenticated} />;
 }
 
 export default App;

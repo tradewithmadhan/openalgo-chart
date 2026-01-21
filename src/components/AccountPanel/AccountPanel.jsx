@@ -90,6 +90,7 @@ const AccountPanel = ({
 
     // Use context data directly (OrderContext provides all data)
     const funds = contextFunds;
+
     const orders = { orders: contextOrders, statistics: {} }; // Wrap for compatibility
     const holdings = { holdings: contextHoldings, statistics: {} }; // Wrap for compatibility
     const trades = contextTrades;
