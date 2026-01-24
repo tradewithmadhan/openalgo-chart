@@ -73,6 +73,18 @@ import { usePaneMenu } from './hooks/usePaneMenu';
 import { useOrders } from '../../context/OrderContext';
 import { useUser } from '../../context/UserContext';
 
+// Helper to normalize time for comparison (handles both UNIX seconds and Date objects)
+const getTimeValue = (t) => {
+    if (typeof t === 'number') return t;
+    if (t && typeof t === 'object') {
+        if (t.year && t.month && t.day) {
+            // Lightweight Charts business day object to timestamp (approx start of day)
+            return new Date(t.year, t.month - 1, t.day).getTime() / 1000;
+        }
+    }
+    return 0; // Invalid or unknown format
+};
+
 const ChartComponent = forwardRef(({
     data: initialData = [],
     symbol = 'RELIANCE',
@@ -2471,7 +2483,10 @@ const ChartComponent = forwardRef(({
                             if (shouldResync()) syncTimeWithAPI();
                             const currentISTTime = getAccurateISTTimestamp();
                             const currentCandleTime = Math.floor(currentISTTime / intervalSeconds) * intervalSeconds;
-                            const needNewCandle = currentCandleTime > lastCandleTime;
+
+                            // Robust time comparison using helper
+                            const lastTimeVal = getTimeValue(lastCandleTime);
+                            const needNewCandle = currentCandleTime > lastTimeVal;
 
                             let candle;
                             if (needNewCandle) {
@@ -2507,8 +2522,17 @@ const ChartComponent = forwardRef(({
                             const currentChartType = chartTypeRef.current;
                             const transformedCandle = transformData([candle], currentChartType)[0];
 
-                            if (transformedCandle && mainSeriesRef.current && !isReplayModeRef.current) {
-                                mainSeriesRef.current.update(transformedCandle);
+                            if (mainSeriesRef.current && !isReplayModeRef.current) {
+                                // Use setData() approach same as regular symbol mode to avoid
+                                // lightweight-charts time ordering issues with update()
+                                try {
+                                    const transformedFullData = transformData(currentData, currentChartType);
+                                    const dataWithFuture = addFutureWhitespacePoints(transformedFullData, intervalSeconds);
+                                    mainSeriesRef.current.setData(dataWithFuture);
+                                } catch (setDataErr) {
+                                    console.warn('[Strategy WebSocket] Failed to update chart with setData:', setDataErr);
+                                }
+
                                 updateRealtimeIndicators(currentData);
                                 updateAxisLabel();
                                 updateOhlcFromLatest();
