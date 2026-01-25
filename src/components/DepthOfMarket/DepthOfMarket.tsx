@@ -39,7 +39,7 @@ const DepthOfMarket: React.FC<DepthOfMarketProps> = ({ symbol, exchange = 'NSE',
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [isPaused, setIsPaused] = useState(false);
-    const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+    const [isRefreshing, setIsRefreshing] = useState(false);
     const abortControllerRef = useRef<AbortController | null>(null);
 
     // Fetch depth data
@@ -66,49 +66,37 @@ const DepthOfMarket: React.FC<DepthOfMarketProps> = ({ symbol, exchange = 'NSE',
         }
     }, [symbol, exchange, isPaused]);
 
-    // Initial fetch and polling - pauses when tab is not visible to save CPU
+    // Event-driven: Fetch only on open and manual refresh (no polling)
     useEffect(() => {
         if (!isOpen || !symbol) return;
-
-        const startPolling = () => {
-            if (intervalRef.current) return; // Already polling
-            intervalRef.current = setInterval(fetchDepth, 1000); // Poll every 1s (reduced from 500ms)
-        };
-
-        const stopPolling = () => {
-            if (intervalRef.current) {
-                clearInterval(intervalRef.current);
-                intervalRef.current = null;
-            }
-        };
-
-        const handleVisibilityChange = () => {
-            if (document.visibilityState === 'hidden') {
-                stopPolling();
-            } else if (isOpen && !isPaused) {
-                fetchDepth(); // Immediate refresh when becoming visible
-                startPolling();
-            }
-        };
 
         setIsLoading(true);
         fetchDepth().finally(() => setIsLoading(false));
 
-        // Only start polling if tab is visible
-        if (document.visibilityState !== 'hidden') {
-            startPolling();
-        }
+        // Refresh when tab becomes visible (user returning to app)
+        const handleVisibilityChange = () => {
+            if (document.visibilityState === 'visible' && isOpen && !isPaused) {
+                fetchDepth();
+            }
+        };
 
         document.addEventListener('visibilitychange', handleVisibilityChange);
 
         return () => {
-            stopPolling();
             document.removeEventListener('visibilitychange', handleVisibilityChange);
             if (abortControllerRef.current) {
                 abortControllerRef.current.abort();
             }
         };
     }, [isOpen, symbol, isPaused, fetchDepth]);
+
+    // Manual refresh handler
+    const handleRefresh = useCallback(async () => {
+        if (isPaused || isRefreshing) return;
+        setIsRefreshing(true);
+        await fetchDepth();
+        setIsRefreshing(false);
+    }, [isPaused, isRefreshing, fetchDepth]);
 
     // Format number with commas and crushing
     const formatNumber = (num: number): string => formatCompactNumber(num, 2);
@@ -140,11 +128,12 @@ const DepthOfMarket: React.FC<DepthOfMarketProps> = ({ symbol, exchange = 'NSE',
                 </div>
                 <div className={styles.headerActions}>
                     <button
-                        className={`${styles.iconBtn} ${isPaused ? styles.paused : ''}`}
-                        onClick={() => setIsPaused(!isPaused)}
-                        title={isPaused ? 'Resume' : 'Pause'}
+                        className={styles.iconBtn}
+                        onClick={handleRefresh}
+                        disabled={isRefreshing}
+                        title="Refresh"
                     >
-                        <RefreshCw size={14} className={!isPaused ? styles.spinning : ''} />
+                        <RefreshCw size={14} className={isRefreshing ? styles.spinning : ''} />
                     </button>
                     <button className={styles.iconBtn} onClick={onClose} title="Close">
                         <X size={14} />

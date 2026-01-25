@@ -247,48 +247,26 @@ export const useTradingData = (isAuthenticated: boolean): UseTradingDataReturn =
     [isAuthenticated]
   );
 
-  // Initial fetch + backup polling (10 seconds - safety net only)
-  // Pauses when tab is hidden to save CPU
+  // Event-driven: Initial fetch + refresh on visibility change only (no polling)
+  // Relies on WebSocket events for real-time updates
   useEffect(() => {
     if (!isAuthenticated) return;
 
-    let intervalId: ReturnType<typeof setInterval> | null = null;
-
-    const startPolling = () => {
-      if (intervalId) return;
-      logger.debug('[useTradingData] Starting backup polling (10s interval)');
-      intervalId = setInterval(() => fetchData('backup-poll'), 10000);
-    };
-
-    const stopPolling = () => {
-      if (intervalId) {
-        logger.debug('[useTradingData] Stopping backup polling');
-        clearInterval(intervalId);
-        intervalId = null;
-      }
-    };
-
-    const handleVisibilityChange = () => {
-      if (document.visibilityState === 'hidden') {
-        stopPolling();
-      } else {
-        fetchData('visibility-resume'); // Immediate refresh when becoming visible
-        startPolling();
-      }
-    };
-
     // Initial fetch
+    logger.debug('[useTradingData] Initial fetch (event-driven mode)');
     fetchData('initial');
 
-    // Only start polling if tab is visible
-    if (document.visibilityState !== 'hidden') {
-      startPolling();
-    }
+    // Refresh when tab becomes visible
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        logger.debug('[useTradingData] Visibility change refresh');
+        fetchData('visibility-resume');
+      }
+    };
 
     document.addEventListener('visibilitychange', handleVisibilityChange);
 
     return () => {
-      stopPolling();
       document.removeEventListener('visibilitychange', handleVisibilityChange);
     };
   }, [isAuthenticated, fetchData]);

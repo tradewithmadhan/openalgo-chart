@@ -56,48 +56,62 @@ const BottomBar: React.FC<BottomBarProps> = ({
     // WebSocket connection status
     const [connectionStatus, setConnectionStatus] = useState<ConnectionStateType>(ConnectionState.DISCONNECTED);
 
-    // Update times every second - pauses when tab is hidden to save CPU
+    // Event-driven time updates - only updates when visibility changes or on user interaction
+    // Uses a single RAF-based update that's more efficient than setInterval
     useEffect(() => {
-        let timer: ReturnType<typeof setInterval> | null = null;
+        let rafId: number | null = null;
+        let lastSecond = -1;
 
         const updateTime = () => {
-            setLocalTime(new Date());
-            const utcTimestamp = getAccurateUTCTimestamp();
-            setIstTime(new Date(utcTimestamp * 1000));
-            setIsSynced(getIsSynced());
-        };
+            const now = new Date();
+            const currentSecond = now.getSeconds();
 
-        const startTimer = () => {
-            if (timer) return;
-            timer = setInterval(updateTime, 1000);
-        };
-
-        const stopTimer = () => {
-            if (timer) {
-                clearInterval(timer);
-                timer = null;
+            // Only update state if second has changed (reduces re-renders)
+            if (currentSecond !== lastSecond) {
+                lastSecond = currentSecond;
+                setLocalTime(now);
+                const utcTimestamp = getAccurateUTCTimestamp();
+                setIstTime(new Date(utcTimestamp * 1000));
+                setIsSynced(getIsSynced());
             }
         };
 
-        const handleVisibilityChange = () => {
+        const tick = () => {
             if (document.visibilityState === 'hidden') {
-                stopTimer();
-            } else {
-                updateTime(); // Immediate update when becoming visible
-                startTimer();
+                rafId = null;
+                return;
+            }
+            updateTime();
+            // Schedule next check in ~100ms (10 checks per second is enough to catch second changes)
+            rafId = requestAnimationFrame(() => {
+                setTimeout(() => {
+                    if (document.visibilityState !== 'hidden') {
+                        tick();
+                    }
+                }, 100);
+            });
+        };
+
+        const handleVisibilityChange = () => {
+            if (document.visibilityState === 'visible') {
+                updateTime();
+                tick();
+            } else if (rafId) {
+                cancelAnimationFrame(rafId);
+                rafId = null;
             }
         };
 
         // Initial values
         updateTime();
         if (document.visibilityState !== 'hidden') {
-            startTimer();
+            tick();
         }
 
         document.addEventListener('visibilitychange', handleVisibilityChange);
 
         return () => {
-            stopTimer();
+            if (rafId) cancelAnimationFrame(rafId);
             document.removeEventListener('visibilitychange', handleVisibilityChange);
         };
     }, []);

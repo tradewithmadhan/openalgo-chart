@@ -97,41 +97,23 @@ const PositionTracker: React.FC<PositionTrackerProps> = ({
     const startXRef = useRef(0);
     const startWidthRef = useRef(0);
 
-    // Update market status every minute - pauses when tab is hidden
+    // Event-driven: Check market status on mount and visibility change only (no polling)
     useEffect(() => {
-        let interval: ReturnType<typeof setInterval> | null = null;
-
         const checkStatus = () => setMarketState(getMarketStatus());
 
-        const startInterval = () => {
-            if (interval) return;
-            interval = setInterval(checkStatus, 60000);
-        };
+        // Initial check
+        checkStatus();
 
-        const stopInterval = () => {
-            if (interval) {
-                clearInterval(interval);
-                interval = null;
-            }
-        };
-
+        // Re-check when tab becomes visible
         const handleVisibilityChange = () => {
-            if (document.visibilityState === 'hidden') {
-                stopInterval();
-            } else {
-                checkStatus(); // Immediate check when becoming visible
-                startInterval();
+            if (document.visibilityState === 'visible') {
+                checkStatus();
             }
         };
-
-        if (document.visibilityState !== 'hidden') {
-            startInterval();
-        }
 
         document.addEventListener('visibilitychange', handleVisibilityChange);
 
         return () => {
-            stopInterval();
             document.removeEventListener('visibilitychange', handleVisibilityChange);
         };
     }, []);
