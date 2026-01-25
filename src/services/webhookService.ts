@@ -105,7 +105,7 @@ export async function sendWebhook(url: string, payload: WebhookPayload): Promise
 
         if (processedMessage) {
             // Try to parse the message as JSON - if it's valid JSON, use it directly
-            const parsed = safeParseJSON(processedMessage);
+            const parsed = safeParseJSON(processedMessage, null);
             if (parsed) {
                 bodyContent = JSON.stringify(parsed);
                 logger.info('[WebhookService] Sending custom JSON payload');
@@ -141,7 +141,7 @@ export async function sendWebhook(url: string, payload: WebhookPayload): Promise
 
             // Try to parse error message from response
             let errorMessage = `Webhook failed (${response.status})`;
-            const errorJson = safeParseJSON(text);
+            const errorJson = safeParseJSON(text, null) as any;
             if (errorJson && errorJson.message) {
                 errorMessage = typeof errorJson.message === 'string'
                     ? errorJson.message

@@ -171,7 +171,7 @@ class ChartTemplateManager {
             ...templates[index],
             ...updates,
             updatedAt: new Date().toISOString(),
-        };
+        } as any;
 
         // Re-serialize indicators if updated
         if (updates.indicators) {

@@ -5,7 +5,6 @@
 
 import { useCallback, type Dispatch, type SetStateAction } from 'react';
 import { set, STORAGE_KEYS } from '../services/storageService';
-// @ts-expect-error - JS module pending conversion
 import { CHART_COLORS } from '../utils/colorUtils';
 
 // ==================== TYPES ====================

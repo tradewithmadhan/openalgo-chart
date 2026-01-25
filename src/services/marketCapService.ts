@@ -4,7 +4,6 @@
  * Data source: Dhan Futures Stock List
  */
 
-// @ts-expect-error - Vite raw import
 import marketCapCSV from '../data/market-cap-data.csv?raw';
 import logger from '../utils/logger';
 

@@ -123,19 +123,19 @@ export function OrderProvider({ children, showToast }: OrderProviderProps) {
 
   const value: OrderContextValue = {
     // Raw data
-    orders,
-    positions,
+    orders: orders as any,
+    positions: positions as any,
     funds,
-    holdings,
-    trades,
+    holdings: holdings as any,
+    trades: trades as any,
 
     // Filtered data for chart visualization
-    activeOrders,
-    activePositions,
+    activeOrders: activeOrders as any,
+    activePositions: activePositions as any,
 
     // Operations
-    onModifyOrder: handleModifyOrder,
-    onCancelOrder: handleCancelOrder,
+    onModifyOrder: handleModifyOrder as any,
+    onCancelOrder: handleCancelOrder as any,
     refresh: refreshTradingData,
   };
 

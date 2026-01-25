@@ -7,7 +7,6 @@
 import { getOptionChain } from './optionChain';
 import logger from '../utils/logger';
 import { getJSON, setJSON, STORAGE_KEYS } from './storageService';
-// @ts-expect-error - JS module pending conversion
 import { formatCompactNumber } from '../utils/shared/formatters';
 
 // ==================== TYPES ====================

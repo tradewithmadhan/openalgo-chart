@@ -4,7 +4,6 @@
  */
 
 import { useCallback, type Dispatch, type SetStateAction } from 'react';
-// @ts-expect-error - JS module pending conversion
 import { VALID_INTERVAL_UNITS, DEFAULT_FAVORITE_INTERVALS, isValidIntervalValue } from '../utils/appUtils';
 
 // ==================== TYPES ====================

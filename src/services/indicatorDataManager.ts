@@ -3,24 +3,17 @@
  * Manages indicator calculations and data caching for alert evaluation
  */
 
-// @ts-expect-error - JS module pending conversion
-import { calculateRSI } from '../utils/indicators';
-// @ts-expect-error - JS module pending conversion
-import { calculateMACD } from '../utils/indicators';
-// @ts-expect-error - JS module pending conversion
-import { calculateBollingerBands } from '../utils/indicators';
-// @ts-expect-error - JS module pending conversion
-import { calculateStochastic } from '../utils/indicators';
-// @ts-expect-error - JS module pending conversion
-import { calculateSupertrend } from '../utils/indicators';
-// @ts-expect-error - JS module pending conversion
-import { calculateVWAP } from '../utils/indicators';
-// @ts-expect-error - JS module pending conversion
-import { calculateSMA } from '../utils/indicators';
-// @ts-expect-error - JS module pending conversion
-import { calculateEMA } from '../utils/indicators';
-// @ts-expect-error - JS module pending conversion
-import { calculateATR } from '../utils/indicators';
+import {
+  calculateRSI,
+  calculateMACD,
+  calculateBollingerBands,
+  calculateStochastic,
+  calculateSupertrend,
+  calculateVWAP,
+  calculateSMA,
+  calculateEMA,
+  calculateATR,
+} from '../utils/indicators';
 import logger from '../utils/logger';
 
 // ==================== TYPES ====================
@@ -430,7 +423,7 @@ export class IndicatorDataManager {
         indicators.macd.fast || 12,
         indicators.macd.slow || 26,
         indicators.macd.signal || 9
-      ) as MACDDataPoint[] | null;
+      ) as any | null;
       if (macdData && macdData.length >= 2) {
         const latest = macdData[macdData.length - 1];
         const previous = macdData[macdData.length - 2];
@@ -459,7 +452,7 @@ export class IndicatorDataManager {
         ohlcData,
         indicators.bollingerBands.period || 20,
         indicators.bollingerBands.stdDev || 2
-      ) as BollingerDataPoint[] | null;
+      ) as any | null;
       if (bbData && bbData.length >= 2) {
         const latest = bbData[bbData.length - 1];
         const previous = bbData[bbData.length - 2];
@@ -484,7 +477,7 @@ export class IndicatorDataManager {
         indicators.stochastic.kPeriod || 14,
         indicators.stochastic.dPeriod || 3,
         indicators.stochastic.smooth || 3
-      ) as StochasticDataPoint[] | null;
+      ) as any | null;
       if (stochData && stochData.length >= 2) {
         const latest = stochData[stochData.length - 1];
         const previous = stochData[stochData.length - 2];
@@ -506,7 +499,7 @@ export class IndicatorDataManager {
         ohlcData,
         indicators.supertrend.period || 10,
         indicators.supertrend.multiplier || 3
-      ) as SupertrendDataPoint[] | null;
+      ) as any | null;
       if (supertrendData && supertrendData.length >= 2) {
         const latest = supertrendData[supertrendData.length - 1];
         const previous = supertrendData[supertrendData.length - 2];
@@ -653,7 +646,7 @@ export class IndicatorDataManager {
             slow: 26,
             signal: 9,
           });
-          const macdResult = workerResult as MACDDataPoint[] | null;
+          const macdResult = workerResult as any | null;
           if (macdResult && macdResult.length >= 2) {
             const latest = macdResult[macdResult.length - 1];
             const prev = macdResult[macdResult.length - 2];
@@ -679,7 +672,7 @@ export class IndicatorDataManager {
             period: 20,
             stdDev: 2,
           });
-          const bbResult = workerResult as BollingerDataPoint[] | null;
+          const bbResult = workerResult as any | null;
           if (bbResult && bbResult.length >= 2) {
             const latest = bbResult[bbResult.length - 1];
             const prev = bbResult[bbResult.length - 2];
@@ -705,7 +698,7 @@ export class IndicatorDataManager {
             dPeriod: 3,
             smooth: 3,
           });
-          const stochResult = workerResult as StochasticDataPoint[] | null;
+          const stochResult = workerResult as any | null;
           if (stochResult && stochResult.length >= 2) {
             const latest = stochResult[stochResult.length - 1];
             const prev = stochResult[stochResult.length - 2];
@@ -720,7 +713,7 @@ export class IndicatorDataManager {
             period: 10,
             multiplier: 3,
           });
-          const stResult = workerResult as SupertrendDataPoint[] | null;
+          const stResult = workerResult as any | null;
           if (stResult && stResult.length >= 2) {
             const latest = stResult[stResult.length - 1];
             const prev = stResult[stResult.length - 2];

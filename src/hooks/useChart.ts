@@ -7,7 +7,6 @@
 
 import { useCallback, useMemo, type MutableRefObject } from 'react';
 import { useWorkspaceStore } from '../store/workspaceStore';
-// @ts-expect-error - JS module pending conversion
 import { indicatorConfigs } from '../components/IndicatorSettings/indicatorConfigs';
 
 // ==================== TYPES ====================

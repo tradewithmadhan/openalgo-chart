@@ -6,7 +6,6 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { getOptionChain } from '../services/optionChain';
-// @ts-expect-error - JS module pending conversion
 import { analyzeOptionChain } from '../utils/optionAnalysis';
 import { isMarketOpen } from '../services/marketService';
 import logger from '../utils/logger';
@@ -170,7 +169,7 @@ export function useOILines(
       }
 
       // Analyze option chain for Max OI and Max Pain
-      const analysis = analyzeOptionChain(chainData.chain) as OIAnalysisResult;
+      const analysis = analyzeOptionChain(chainData.chain as any) as OIAnalysisResult;
 
       logger.debug('[useOILines] Analysis result:', {
         underlying,

@@ -12,13 +12,19 @@
 import type {
     IChartApi,
     ISeriesApi,
-    ISeriesPrimitivePaneRenderer,
-    ISeriesPrimitivePaneView,
+    IPrimitivePaneRenderer,
+    IPrimitivePaneView,
     SeriesAttachedParameter,
     SeriesOptionsMap,
     Time,
-    BitmapCoordinatesRenderingScope,
 } from 'lightweight-charts';
+
+interface BitmapCoordinatesRenderingScope {
+    context: CanvasRenderingContext2D;
+    bitmapSize: { width: number; height: number };
+    horizontalPixelRatio: number;
+    verticalPixelRatio: number;
+}
 
 import { getLetterColor, TPO_LINE_COLORS } from './TPOConstants';
 
@@ -113,7 +119,7 @@ const DEFAULT_OPTIONS: TPOPrimitiveOptions = {
 /**
  * TPO Pane Renderer - handles actual Canvas2D drawing
  */
-class TPOPaneRenderer implements ISeriesPrimitivePaneRenderer {
+class TPOPaneRenderer implements IPrimitivePaneRenderer {
     private _source: TPOProfilePrimitive;
 
     constructor(source: TPOProfilePrimitive) {
@@ -386,7 +392,7 @@ class TPOPaneRenderer implements ISeriesPrimitivePaneRenderer {
 
 // ==================== PANE VIEW ====================
 
-class TPOPaneView implements ISeriesPrimitivePaneView {
+class TPOPaneView implements IPrimitivePaneView {
     private _source: TPOProfilePrimitive;
 
     constructor(source: TPOProfilePrimitive) {
@@ -395,7 +401,7 @@ class TPOPaneView implements ISeriesPrimitivePaneView {
 
     update(): void {}
 
-    renderer(): ISeriesPrimitivePaneRenderer {
+    renderer(): IPrimitivePaneRenderer {
         return new TPOPaneRenderer(this._source);
     }
 
@@ -435,7 +441,7 @@ export class TPOProfilePrimitive {
         this._requestUpdate = null;
     }
 
-    paneViews(): readonly ISeriesPrimitivePaneView[] {
+    paneViews(): readonly IPrimitivePaneView[] {
         return this._paneViews;
     }
 

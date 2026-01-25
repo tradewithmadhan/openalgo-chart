@@ -1,8 +1,8 @@
-import { ISeriesPrimitivePaneView } from 'lightweight-charts';
+import type { IPrimitivePaneView } from 'lightweight-charts';
 import { RendererData } from './types';
 import { RiskCalculatorRenderer } from './renderer';
 
-export class RiskCalculatorPaneView implements ISeriesPrimitivePaneView {
+export class RiskCalculatorPaneView implements IPrimitivePaneView {
   private _data: RendererData | null = null;
 
   update(data: RendererData): void {

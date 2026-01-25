@@ -5,7 +5,6 @@
  */
 
 import { getKlines } from './openalgo';
-// @ts-expect-error - JS module pending conversion
 import { calculateANNStrategy } from '../utils/indicators/annStrategy';
 import logger from '../utils/logger';
 

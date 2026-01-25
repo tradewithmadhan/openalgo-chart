@@ -4,7 +4,6 @@
  */
 
 import { useCallback, type MutableRefObject, type Dispatch, type SetStateAction } from 'react';
-// @ts-expect-error - JS module pending conversion
 import { formatPrice } from '../utils/appUtils';
 
 // ==================== TYPES ====================

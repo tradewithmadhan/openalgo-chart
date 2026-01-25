@@ -1,0 +1,132 @@
+import React, { useState, useRef, useEffect, useCallback } from 'react';
+import type { ReactNode } from 'react';
+import styles from './Tooltip.module.css';
+import classNames from 'classnames';
+
+type TooltipPosition = 'top' | 'bottom' | 'left' | 'right';
+
+export interface TooltipProps {
+    children: ReactNode;
+    content?: string;
+    shortcut?: string;
+    position?: TooltipPosition;
+    delay?: number;
+    disabled?: boolean;
+}
+
+/**
+ * Reusable Tooltip Component
+ * Features:
+ * - Position-aware (auto-adjusts to viewport)
+ * - Hover delay to prevent flicker
+ * - Keyboard shortcut display support
+ * - Portal-free (positioned relative to trigger)
+ */
+const Tooltip: React.FC<TooltipProps> = ({
+    children,
+    content,
+    shortcut,
+    position = 'top',
+    delay = 200,
+    disabled = false
+}) => {
+    const [isVisible, setIsVisible] = useState(false);
+    const [actualPosition, setActualPosition] = useState<TooltipPosition>(position);
+    const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const tooltipRef = useRef<HTMLDivElement>(null);
+    const triggerRef = useRef<HTMLDivElement>(null);
+
+    // Calculate best position based on viewport
+    const calculatePosition = useCallback((): TooltipPosition => {
+        if (!tooltipRef.current || !triggerRef.current) return position;
+
+        const trigger = triggerRef.current.getBoundingClientRect();
+        const tooltip = tooltipRef.current.getBoundingClientRect();
+        const viewport = {
+            width: window.innerWidth,
+            height: window.innerHeight
+        };
+
+        // Check if tooltip fits in preferred position
+        const spaceTop = trigger.top;
+        const spaceBottom = viewport.height - trigger.bottom;
+        const spaceLeft = trigger.left;
+        const spaceRight = viewport.width - trigger.right;
+
+        let bestPosition: TooltipPosition = position;
+
+        if (position === 'top' && spaceTop < tooltip.height + 8) {
+            bestPosition = 'bottom';
+        } else if (position === 'bottom' && spaceBottom < tooltip.height + 8) {
+            bestPosition = 'top';
+        } else if (position === 'left' && spaceLeft < tooltip.width + 8) {
+            bestPosition = 'right';
+        } else if (position === 'right' && spaceRight < tooltip.width + 8) {
+            bestPosition = 'left';
+        }
+
+        return bestPosition;
+    }, [position]);
+
+    const handleMouseEnter = useCallback(() => {
+        if (disabled) return;
+
+        timeoutRef.current = setTimeout(() => {
+            setIsVisible(true);
+        }, delay);
+    }, [delay, disabled]);
+
+    const handleMouseLeave = useCallback(() => {
+        if (timeoutRef.current) {
+            clearTimeout(timeoutRef.current);
+        }
+        setIsVisible(false);
+    }, []);
+
+    // Update position when tooltip becomes visible
+    useEffect(() => {
+        if (isVisible) {
+            const newPosition = calculatePosition();
+            setActualPosition(newPosition);
+        }
+    }, [isVisible, calculatePosition]);
+
+    // Cleanup timeout on unmount
+    useEffect(() => {
+        return () => {
+            if (timeoutRef.current) {
+                clearTimeout(timeoutRef.current);
+            }
+        };
+    }, []);
+
+    // Don't render tooltip if no content
+    if (!content && !shortcut) {
+        return <>{children}</>;
+    }
+
+    return (
+        <div
+            className={styles.tooltipWrapper}
+            ref={triggerRef}
+            onMouseEnter={handleMouseEnter}
+            onMouseLeave={handleMouseLeave}
+        >
+            {children}
+            {isVisible && (
+                <div
+                    ref={tooltipRef}
+                    className={classNames(styles.tooltip, styles[actualPosition])}
+                    role="tooltip"
+                >
+                    <span className={styles.content}>{content}</span>
+                    {shortcut && (
+                        <span className={styles.shortcut}>{shortcut}</span>
+                    )}
+                </div>
+            )}
+        </div>
+    );
+};
+
+export default Tooltip;

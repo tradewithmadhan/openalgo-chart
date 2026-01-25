@@ -352,7 +352,7 @@ export const getThemeColor = (key: ThemePaletteKey, theme: ThemeName = 'dark'): 
  */
 export const getIndicatorColor = (type: string): string => {
     const typeUpper = type?.toUpperCase() || '';
-    const color = (INDICATOR_COLORS as Record<string, unknown>)[typeUpper];
+    const color = (INDICATOR_COLORS as any)[typeUpper];
     return typeof color === 'string' ? color : '#2196F3';
 };
 

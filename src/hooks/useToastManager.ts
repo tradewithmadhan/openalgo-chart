@@ -33,6 +33,7 @@ export interface UseToastManagerReturn {
   showToast: (message: string, type?: ToastType, action?: ToastAction | null) => void;
   removeToast: (id: number) => void;
   showSnapshotToast: (message: string) => void;
+  clearSnapshotToast: () => void;
   cleanup: () => void;
 }
 
@@ -95,6 +96,16 @@ export function useToastManager(maxToasts: number = 3): UseToastManagerReturn {
   }, []);
 
   /**
+   * Clear the snapshot toast immediately
+   */
+  const clearSnapshotToast = useCallback(() => {
+    if (snapshotToastTimeoutRef.current) {
+      clearTimeout(snapshotToastTimeoutRef.current);
+    }
+    setSnapshotToast(null);
+  }, []);
+
+  /**
    * Cleanup function for unmount
    */
   const cleanup = useCallback(() => {
@@ -109,6 +120,7 @@ export function useToastManager(maxToasts: number = 3): UseToastManagerReturn {
     showToast,
     removeToast,
     showSnapshotToast,
+    clearSnapshotToast,
     cleanup,
   };
 }

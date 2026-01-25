@@ -4,7 +4,6 @@
  */
 
 import { useCallback, type Dispatch, type SetStateAction } from 'react';
-// @ts-expect-error - JS module pending conversion
 import { indicatorConfigs } from '../components/IndicatorSettings/indicatorConfigs';
 
 // ==================== TYPES ====================

@@ -4,7 +4,6 @@
  */
 
 import { useEffect, useCallback, useRef } from 'react';
-// @ts-expect-error - JS module pending conversion
 import { SHORTCUTS, matchesShortcut, isInputField } from '../config/shortcuts';
 
 // ==================== TYPES ====================

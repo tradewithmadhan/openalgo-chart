@@ -1,5 +1,15 @@
-import { CanvasRenderingTarget2D } from 'lightweight-charts';
 import { RendererData } from './types';
+
+interface BitmapCoordinatesRenderingScope {
+  context: CanvasRenderingContext2D;
+  horizontalPixelRatio: number;
+  verticalPixelRatio: number;
+  bitmapSize: { width: number; height: number };
+}
+
+interface RenderTarget {
+  useBitmapCoordinateSpace(cb: (scope: BitmapCoordinatesRenderingScope) => void): void;
+}
 
 export class RiskCalculatorRenderer {
   private _data: RendererData | null;
@@ -8,7 +18,7 @@ export class RiskCalculatorRenderer {
     this._data = data;
   }
 
-  draw(target: CanvasRenderingTarget2D): void {
+  draw(target: RenderTarget): void {
     if (!this._data) return;
 
     target.useBitmapCoordinateSpace(scope => {

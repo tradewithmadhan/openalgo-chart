@@ -4,9 +4,7 @@
  */
 
 import { useState, useEffect, useCallback, useMemo } from 'react';
-// @ts-expect-error - JS module pending conversion
 import { fuzzySearch } from '../utils/fuzzySearch';
-// @ts-expect-error - JS module pending conversion
 import { THEMES } from '../styles/themes';
 import { getJSON, setJSON, STORAGE_KEYS } from '../services/storageService';
 
@@ -436,7 +434,7 @@ export const useCommandPalette = (handlers: CommandPaletteHandlers): UseCommandP
       }
 
       // Search by title and keywords
-      return fuzzySearch(query, commands, ['title', 'description'], 0.2) as Command[];
+      return fuzzySearch(query, commands as any, ['title', 'description'], 0.2) as any;
     },
     [commands]
   );

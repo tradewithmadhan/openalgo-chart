@@ -5,7 +5,6 @@
  */
 
 import { useState, useEffect, useCallback, type Dispatch, type SetStateAction } from 'react';
-// @ts-expect-error - JS module pending conversion
 import { validateOrder, createOrderPayload } from '../utils/shared/orderUtils';
 
 // ==================== TYPES ====================
@@ -168,7 +167,7 @@ const useOrderFormState = ({
         strategy: initialData.strategy || 'MANUAL',
         disclosedQuantity: initialData.disclosed_quantity || 0,
         orderId: initialData.orderid || initialData.order_id,
-      }) as OrderPayload;
+      }) as any;
 
       await onSubmit(payload);
       onClose();

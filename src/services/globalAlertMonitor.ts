@@ -10,7 +10,6 @@ import { getJSON, setJSON, STORAGE_KEYS } from './storageService';
 import { subscribeToMultiTicker } from './openalgo';
 import logger from '../utils/logger';
 import { IndicatorDataManager } from './indicatorDataManager';
-// @ts-expect-error - JS module pending conversion
 import { AlertEvaluator } from '../utils/alerts/alertEvaluator';
 
 // Must match ChartComponent.jsx storage key
@@ -372,9 +371,9 @@ class GlobalAlertMonitor {
       const prevData = previousData ? { [alert.indicator || '']: previousData } : {};
 
       const isTriggered = this._alertEvaluator.evaluate(
-        { ...condition, indicator: alert.indicator },
-        currentData,
-        prevData,
+        { ...condition, indicator: alert.indicator } as any,
+        currentData as any,
+        prevData as any,
         currentPrice,
         previousPrice
       );

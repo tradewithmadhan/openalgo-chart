@@ -124,7 +124,7 @@ export const normalizeStatus = (status: string | null | undefined): string => {
  * @returns Whether the exchange is F&O
  */
 export const isFnOExchange = (exchange: string): boolean => {
-    return FNO_EXCHANGES.includes(exchange);
+    return FNO_EXCHANGES.includes(exchange as any);
 };
 
 /**
@@ -152,7 +152,7 @@ export const validateOrder = ({
     }
 
     // Action validation
-    if (!action || !Object.values(ORDER_ACTIONS).includes(action)) {
+    if (!action || !Object.values(ORDER_ACTIONS).includes(action as any)) {
         errors.action = 'Invalid action (must be BUY or SELL)';
     }
 
@@ -168,7 +168,7 @@ export const validateOrder = ({
     }
 
     // Price validation (for LIMIT and SL orders)
-    if (PRICE_REQUIRED_ORDER_TYPES.includes(orderType)) {
+    if (PRICE_REQUIRED_ORDER_TYPES.includes(orderType as any)) {
         const priceNum = safeParseFloat(price, 0);
         if (priceNum <= 0) {
             errors.price = 'Price must be greater than 0';
@@ -176,7 +176,7 @@ export const validateOrder = ({
     }
 
     // Trigger price validation (for SL and SL-M orders)
-    if (TRIGGER_REQUIRED_ORDER_TYPES.includes(orderType)) {
+    if (TRIGGER_REQUIRED_ORDER_TYPES.includes(orderType as any)) {
         const triggerNum = safeParseFloat(triggerPrice, 0);
         if (triggerNum <= 0) {
             errors.triggerPrice = 'Trigger price must be greater than 0';
@@ -217,7 +217,7 @@ export const createOrderPayload = ({
         product,
         pricetype: orderType,
         price: orderType === ORDER_TYPES.MARKET ? 0 : safeParseFloat(price),
-        trigger_price: TRIGGER_REQUIRED_ORDER_TYPES.includes(orderType)
+        trigger_price: TRIGGER_REQUIRED_ORDER_TYPES.includes(orderType as any)
             ? safeParseFloat(triggerPrice)
             : 0,
         strategy,

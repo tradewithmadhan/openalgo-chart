@@ -4,7 +4,6 @@
  */
 
 import { useState, useMemo, useCallback } from 'react';
-// @ts-expect-error - JS module pending conversion
 import { calculateRiskPosition, validateRiskParams } from '../utils/indicators/riskCalculator';
 
 // ==================== TYPES ====================
