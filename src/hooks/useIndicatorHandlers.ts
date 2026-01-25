@@ -175,20 +175,21 @@ export const useIndicatorHandlers = ({
   // Handler for updating indicator settings from TradingView-style dialog
   const handleIndicatorSettings = useCallback(
     (id: string, newSettings: Partial<IndicatorSettings>) => {
-      setCharts((prev) =>
-        prev.map((chart) => {
+      setCharts((prev) => {
+        return prev.map((chart) => {
           if (chart.id !== activeChartId) return chart;
+          const newIndicators = (chart.indicators || []).map((ind) => {
+            if (ind.id === id) {
+              return { ...ind, ...newSettings };
+            }
+            return ind;
+          });
           return {
             ...chart,
-            indicators: (chart.indicators || []).map((ind) => {
-              if (ind.id === id) {
-                return { ...ind, ...newSettings };
-              }
-              return ind;
-            }),
+            indicators: newIndicators,
           };
-        })
-      );
+        });
+      });
     },
     [activeChartId, setCharts]
   );

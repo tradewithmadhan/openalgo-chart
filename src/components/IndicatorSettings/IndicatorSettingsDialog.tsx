@@ -316,11 +316,20 @@ const IndicatorSettingsDialog: FC<IndicatorSettingsDialogProps> = ({
         setLocalSettings(prev => ({ ...prev, [key]: value }));
     }, []);
 
-    // Handle save
+    // Handle save - merge with defaults to ensure all fields are included
     const handleSave = useCallback((): void => {
-        onSave?.(localSettings);
+        // Build complete settings with defaults for any unset fields
+        const completeSettings = { ...localSettings };
+        if (config) {
+            [...config.inputs, ...config.style].forEach(field => {
+                if (completeSettings[field.key] === undefined) {
+                    completeSettings[field.key] = field.default;
+                }
+            });
+        }
+        onSave?.(completeSettings);
         onClose();
-    }, [localSettings, onSave, onClose]);
+    }, [localSettings, config, onSave, onClose]);
 
     // Handle cancel
     const handleCancel = useCallback((): void => {

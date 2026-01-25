@@ -347,7 +347,7 @@ export const updatePivotPointsSeries = (series: any, ind: IndicatorConfig, data:
 
 /**
  * Update Pine Script indicator series
- * Uses cached pineResult from the indicator config if available
+ * Attempts to calculate common indicators (EMA, SMA) directly from Pine code
  */
 export const updatePineSeries = (series: any, ind: IndicatorConfig, data: OHLCData[], isVisible: boolean): void => {
     series.applyOptions({
@@ -359,29 +359,83 @@ export const updatePineSeries = (series: any, ind: IndicatorConfig, data: OHLCDa
 
     // If we have cached Pine result data, use it
     if (ind.pineResultData && Array.isArray(ind.pineResultData)) {
-        // Map the result data to chart format
         const chartData = ind.pineResultData
             .map((value: number, index: number) => {
                 if (index >= data.length || value === null || value === undefined || isNaN(value)) {
                     return null;
                 }
-                return {
-                    time: data[index].time,
-                    value: value
-                };
+                return { time: data[index].time, value: value };
             })
             .filter((d: any) => d !== null);
 
         if (chartData.length > 0) {
             series.setData(chartData);
+            return;
         }
+    }
+
+    // Try to calculate directly from Pine code if it's a simple indicator
+    const pineCode = ind.pineCode as string || '';
+    const length = (ind.length as number) || 14;
+    const source = (ind.source as string) || 'close';
+
+    // Get source data based on input
+    const getSourceData = (d: OHLCData): number => {
+        switch (source) {
+            case 'open': return d.open;
+            case 'high': return d.high;
+            case 'low': return d.low;
+            case 'hl2': return (d.high + d.low) / 2;
+            case 'hlc3': return (d.high + d.low + d.close) / 3;
+            case 'ohlc4': return (d.open + d.high + d.low + d.close) / 4;
+            default: return d.close;
+        }
+    };
+
+    let calculatedData: { time: number; value: number }[] | null = null;
+
+    // Detect EMA pattern: ta.ema(source, length)
+    if (/ta\.ema\s*\(/.test(pineCode)) {
+        const sourceData = data.map(getSourceData);
+        const emaValues: number[] = [];
+        const multiplier = 2 / (length + 1);
+        let ema = sourceData[0];
+
+        for (let i = 0; i < sourceData.length; i++) {
+            if (i === 0) {
+                ema = sourceData[i];
+            } else {
+                ema = (sourceData[i] - ema) * multiplier + ema;
+            }
+            emaValues.push(ema);
+        }
+
+        calculatedData = data.map((d, i) => ({ time: d.time, value: emaValues[i] }));
+    }
+    // Detect SMA pattern: ta.sma(source, length)
+    else if (/ta\.sma\s*\(/.test(pineCode)) {
+        const sourceData = data.map(getSourceData);
+        calculatedData = data.map((d, i) => {
+            if (i < length - 1) {
+                return { time: d.time, value: sourceData[i] };
+            }
+            const sum = sourceData.slice(i - length + 1, i + 1).reduce((a, b) => a + b, 0);
+            return { time: d.time, value: sum / length };
+        });
+    }
+    // Detect RSI pattern: ta.rsi(source, length)
+    else if (/ta\.rsi\s*\(/.test(pineCode)) {
+        const rsiData = calculateRSI(data, length);
+        if (rsiData) {
+            calculatedData = rsiData;
+        }
+    }
+
+    if (calculatedData && calculatedData.length > 0) {
+        series.setData(calculatedData);
     } else {
-        // Fallback: show close price as placeholder until Pine execution completes
-        // This prevents the indicator from appearing empty
-        const placeholderData = data.map(d => ({
-            time: d.time,
-            value: d.close
-        }));
+        // Fallback: show close price as placeholder
+        const placeholderData = data.map(d => ({ time: d.time, value: d.close }));
         series.setData(placeholderData);
     }
 };
