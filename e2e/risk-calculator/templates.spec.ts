@@ -1,8 +1,8 @@
 import { test, expect } from '@playwright/test';
-import { RiskCalculatorFixture } from '../fixtures/risk-calculator.fixture.js';
+import { RiskCalculatorFixture } from '../fixtures/risk-calculator.fixture';
 
 test.describe('Risk Calculator - Templates', () => {
-  let riskCalc;
+  let riskCalc: RiskCalculatorFixture;
 
   test.beforeEach(async ({ page }) => {
     riskCalc = new RiskCalculatorFixture(page);
@@ -44,7 +44,7 @@ test.describe('Risk Calculator - Templates', () => {
 
     // Get all options except "Custom" and "Save Current..."
     const allOptions = await templateSelect.locator('option').all();
-    let presetOption = null;
+    let presetOption: string | null = null;
 
     for (const option of allOptions) {
       const value = await option.getAttribute('value');

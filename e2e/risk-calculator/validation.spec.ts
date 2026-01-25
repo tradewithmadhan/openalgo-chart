@@ -1,8 +1,8 @@
 import { test, expect } from '@playwright/test';
-import { RiskCalculatorFixture } from '../fixtures/risk-calculator.fixture.js';
+import { RiskCalculatorFixture } from '../fixtures/risk-calculator.fixture';
 
 test.describe('Risk Calculator - Input Validation', () => {
-  let riskCalc;
+  let riskCalc: RiskCalculatorFixture;
 
   test.beforeEach(async ({ page }) => {
     riskCalc = new RiskCalculatorFixture(page);

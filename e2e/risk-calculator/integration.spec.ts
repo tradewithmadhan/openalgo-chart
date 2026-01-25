@@ -1,12 +1,12 @@
 import { test, expect } from '@playwright/test';
-import { RiskCalculatorFixture } from '../fixtures/risk-calculator.fixture.js';
+import { RiskCalculatorFixture } from '../fixtures/risk-calculator.fixture';
 
 /**
  * Integration Tests - Full End-to-End Workflows
  * These tests verify complete user scenarios from start to finish
  */
 test.describe('Risk Calculator - Integration Tests', () => {
-  let riskCalc;
+  let riskCalc: RiskCalculatorFixture;
 
   test.beforeEach(async ({ page }) => {
     riskCalc = new RiskCalculatorFixture(page);

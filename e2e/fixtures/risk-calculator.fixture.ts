@@ -1,11 +1,26 @@
-import { expect } from '@playwright/test';
+import { expect, Page, Locator } from '@playwright/test';
+
+/**
+ * Form data for risk calculator
+ */
+export interface RiskCalculatorFormData {
+  capital?: number;
+  riskPercent?: number;
+  side?: 'BUY' | 'SELL';
+  entryPrice?: number | string;
+  stopLoss?: number | string;
+  targetPrice?: number | string;
+  riskRewardRatio?: number;
+}
 
 /**
  * Risk Calculator Fixture
  * Reusable helper functions for E2E testing the Risk Calculator feature
  */
 export class RiskCalculatorFixture {
-  constructor(page) {
+  page: Page;
+
+  constructor(page: Page) {
     this.page = page;
   }
 
@@ -71,7 +86,7 @@ export class RiskCalculatorFixture {
   /**
    * Navigate to the app and wait for it to load
    */
-  async navigateToApp() {
+  async navigateToApp(): Promise<void> {
     await this.page.goto('/');
 
     // Wait for page to load
@@ -121,7 +136,7 @@ export class RiskCalculatorFixture {
   /**
    * Enable Risk Calculator from the indicator dropdown
    */
-  async enable() {
+  async enable(): Promise<void> {
     // Click Indicators button
     await this.page.click(this.selectors.indicatorButton);
 
@@ -138,7 +153,7 @@ export class RiskCalculatorFixture {
   /**
    * Close the Risk Calculator panel
    */
-  async close() {
+  async close(): Promise<void> {
     await this.page.click(this.selectors.closeButton);
     await expect(this.page.locator(this.selectors.panel).first()).not.toBeVisible();
   }
@@ -146,7 +161,7 @@ export class RiskCalculatorFixture {
   /**
    * Switch to edit mode (if in results view)
    */
-  async openEditMode() {
+  async openEditMode(): Promise<void> {
     // Check if we're already in edit mode by looking for calculate button
     const calculateButton = this.page.locator(this.selectors.calculateButton);
     const isVisible = await calculateButton.isVisible().catch(() => false);
@@ -160,16 +175,8 @@ export class RiskCalculatorFixture {
 
   /**
    * Fill form with values
-   * @param {Object} data - Form data
-   * @param {number} data.capital - Capital amount
-   * @param {number} data.riskPercent - Risk percentage
-   * @param {string} data.side - 'BUY' or 'SELL'
-   * @param {number} data.entryPrice - Entry price
-   * @param {number} data.stopLoss - Stop loss price
-   * @param {number} data.targetPrice - Target price (optional)
-   * @param {number} data.riskRewardRatio - Risk:Reward ratio (optional)
    */
-  async fillForm(data) {
+  async fillForm(data: RiskCalculatorFormData): Promise<void> {
     if (data.capital !== undefined) {
       await this.page.fill(this.selectors.capitalInput, String(data.capital));
     }
@@ -196,7 +203,7 @@ export class RiskCalculatorFixture {
   /**
    * Click the Calculate button
    */
-  async calculate() {
+  async calculate(): Promise<void> {
     await this.page.click(this.selectors.calculateButton);
     // Wait for calculation to complete (edit mode to close)
     await this.page.waitForTimeout(500);
@@ -204,19 +211,16 @@ export class RiskCalculatorFixture {
 
   /**
    * Get current side selection
-   * @returns {Promise<string>} 'BUY' or 'SELL'
    */
-  async getCurrentSide() {
+  async getCurrentSide(): Promise<string> {
     return await this.page.locator(this.selectors.sideSelect).inputValue();
   }
 
   /**
    * Get current input value
-   * @param {string} inputName - Name of the input field
-   * @returns {Promise<string>} Input value
    */
-  async getInputValue(inputName) {
-    const selector = this.selectors[`${inputName}Input`];
+  async getInputValue(inputName: string): Promise<string> {
+    const selector = this.selectors[`${inputName}Input` as keyof typeof this.selectors];
     if (!selector) {
       throw new Error(`Unknown input: ${inputName}`);
     }
@@ -225,19 +229,16 @@ export class RiskCalculatorFixture {
 
   /**
    * Check if calculate button is enabled
-   * @returns {Promise<boolean>}
    */
-  async isCalculateButtonEnabled() {
+  async isCalculateButtonEnabled(): Promise<boolean> {
     const button = this.page.locator(this.selectors.calculateButton);
     return !(await button.isDisabled());
   }
 
   /**
    * Check if a field has an error
-   * @param {string} fieldName - Name of the field
-   * @returns {Promise<boolean>}
    */
-  async hasFieldError(fieldName) {
+  async hasFieldError(_fieldName: string): Promise<boolean> {
     const errorLocator = this.page.locator(this.selectors.fieldError);
     const count = await errorLocator.count();
     return count > 0;
@@ -245,9 +246,8 @@ export class RiskCalculatorFixture {
 
   /**
    * Get field error message
-   * @returns {Promise<string|null>}
    */
-  async getFieldErrorMessage() {
+  async getFieldErrorMessage(): Promise<string | null> {
     const errorLocator = this.page.locator(this.selectors.fieldError).first();
     const isVisible = await errorLocator.isVisible().catch(() => false);
     if (isVisible) {
@@ -259,7 +259,7 @@ export class RiskCalculatorFixture {
   /**
    * Click suggestion button if available
    */
-  async clickSuggestion() {
+  async clickSuggestion(): Promise<void> {
     const suggestionButton = this.page.locator(this.selectors.suggestionButton).first();
     const isVisible = await suggestionButton.isVisible().catch(() => false);
     if (isVisible) {
@@ -270,7 +270,7 @@ export class RiskCalculatorFixture {
   /**
    * Minimize the panel
    */
-  async minimize() {
+  async minimize(): Promise<void> {
     // Find and click the minimize button (contains Minimize2 icon)
     const buttons = await this.page.locator('[class*="iconButton"]').all();
     for (const button of buttons) {
@@ -288,7 +288,7 @@ export class RiskCalculatorFixture {
   /**
    * Maximize the panel (from minimized state)
    */
-  async maximize() {
+  async maximize(): Promise<void> {
     const minimizedPanel = this.page.locator(this.selectors.panelMinimized);
     await minimizedPanel.locator('button').click();
     await expect(this.page.locator(this.selectors.panel).first()).toBeVisible();
@@ -296,18 +296,16 @@ export class RiskCalculatorFixture {
 
   /**
    * Select a template
-   * @param {string} templateValue - Template value to select
    */
-  async selectTemplate(templateValue) {
+  async selectTemplate(templateValue: string): Promise<void> {
     await this.page.selectOption(this.selectors.templateSelect, templateValue);
     await this.page.waitForTimeout(300);
   }
 
   /**
    * Save current values as a new template
-   * @param {string} templateName - Name for the new template
    */
-  async saveTemplate(templateName) {
+  async saveTemplate(templateName: string): Promise<void> {
     // Select "Save Current..." option
     await this.page.selectOption(this.selectors.templateSelect, 'save_new');
 
@@ -326,9 +324,8 @@ export class RiskCalculatorFixture {
 
   /**
    * Get canvas element
-   * @returns {Promise<Locator>}
    */
-  async getCanvas() {
+  async getCanvas(): Promise<Locator> {
     return this.page.locator(this.selectors.canvas).first();
   }
 
@@ -336,17 +333,16 @@ export class RiskCalculatorFixture {
    * Wait for calculation to complete
    * Just a helper to add a small delay for state updates
    */
-  async waitForCalculation() {
+  async waitForCalculation(): Promise<void> {
     await this.page.waitForTimeout(500);
   }
 
   /**
    * Setup console error tracking
    * Call this at the beginning of a test to track console errors
-   * @returns {Array} Array that will be populated with console errors
    */
-  setupConsoleErrorTracking() {
-    const errors = [];
+  setupConsoleErrorTracking(): string[] {
+    const errors: string[] = [];
     this.page.on('console', msg => {
       if (msg.type() === 'error') {
         errors.push(msg.text());
@@ -358,7 +354,7 @@ export class RiskCalculatorFixture {
   /**
    * Clear localStorage (useful for template tests)
    */
-  async clearStorage() {
+  async clearStorage(): Promise<void> {
     await this.page.evaluate(() => {
       localStorage.clear();
       sessionStorage.clear();
@@ -367,9 +363,8 @@ export class RiskCalculatorFixture {
 
   /**
    * Get displayed quantity value
-   * @returns {Promise<string>}
    */
-  async getDisplayedQuantity() {
+  async getDisplayedQuantity(): Promise<string | null> {
     const locator = this.page.locator(this.selectors.displayQuantity);
     await expect(locator).toBeVisible();
     return await locator.textContent();
@@ -377,9 +372,8 @@ export class RiskCalculatorFixture {
 
   /**
    * Get displayed risk amount
-   * @returns {Promise<string>}
    */
-  async getDisplayedRiskAmount() {
+  async getDisplayedRiskAmount(): Promise<string | null> {
     const locator = this.page.locator(this.selectors.displayRiskAmount);
     await expect(locator).toBeVisible();
     return await locator.textContent();
@@ -390,7 +384,7 @@ export class RiskCalculatorFixture {
  * Create a test fixture for Risk Calculator
  * Usage: const riskCalc = await createRiskCalculatorFixture(page);
  */
-export async function createRiskCalculatorFixture(page) {
+export async function createRiskCalculatorFixture(page: Page): Promise<RiskCalculatorFixture> {
   const fixture = new RiskCalculatorFixture(page);
   return fixture;
 }

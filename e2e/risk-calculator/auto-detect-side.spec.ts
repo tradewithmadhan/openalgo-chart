@@ -1,12 +1,12 @@
 import { test, expect } from '@playwright/test';
-import { RiskCalculatorFixture } from '../fixtures/risk-calculator.fixture.js';
+import { RiskCalculatorFixture } from '../fixtures/risk-calculator.fixture';
 
 /**
  * Bug Fix #2 Verification Tests
  * Tests auto-detection of BUY/SELL side based on stop loss position relative to entry
  */
 test.describe('Risk Calculator - Auto-Detect Side (Bug Fix #2)', () => {
-  let riskCalc;
+  let riskCalc: RiskCalculatorFixture;
 
   test.beforeEach(async ({ page }) => {
     riskCalc = new RiskCalculatorFixture(page);

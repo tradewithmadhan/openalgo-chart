@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { RiskCalculatorFixture } from '../fixtures/risk-calculator.fixture.js';
+import { RiskCalculatorFixture } from '../fixtures/risk-calculator.fixture';
 
 /**
  * Bug Fix #1 Verification Tests
@@ -9,7 +9,7 @@ import { RiskCalculatorFixture } from '../fixtures/risk-calculator.fixture.js';
  * direct canvas dragging, which is more reliable for E2E testing.
  */
 test.describe('Risk Calculator - Draggable Lines (Bug Fix #1)', () => {
-  let riskCalc;
+  let riskCalc: RiskCalculatorFixture;
 
   test.beforeEach(async ({ page }) => {
     riskCalc = new RiskCalculatorFixture(page);

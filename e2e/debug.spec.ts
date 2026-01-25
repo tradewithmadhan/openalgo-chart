@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { RiskCalculatorFixture } from './fixtures/risk-calculator.fixture.js';
+import { RiskCalculatorFixture } from './fixtures/risk-calculator.fixture';
 
 test('debug - check navigation and element finding', async ({ page }) => {
   const riskCalc = new RiskCalculatorFixture(page);
