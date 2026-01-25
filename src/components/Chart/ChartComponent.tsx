@@ -4968,6 +4968,29 @@ const ChartComponent = forwardRef<any, ChartComponentProps>(({
                             }
                         }}
                         theme={theme as any}
+                        // For Pine indicators, generate dynamic config from pineInputs
+                        dynamicConfig={activeInd?.type === 'pine' && activeInd?.pineInputs ? {
+                            name: activeInd.name || 'Pine Script',
+                            fullName: activeInd.name || 'Pine Script Indicator',
+                            pane: activeInd.pane || 'pine_indicator',
+                            inputs: (activeInd.pineInputs || []).map((input: any) => ({
+                                key: input.name,
+                                label: input.title || input.name,
+                                type: input.type === 'int' || input.type === 'float' ? 'number' :
+                                      input.type === 'bool' ? 'boolean' :
+                                      input.type === 'color' ? 'color' :
+                                      input.type === 'string' || input.type === 'source' ? 'select' : 'text',
+                                default: input.default,
+                                min: input.minval,
+                                max: input.maxval,
+                                step: input.step || (input.type === 'float' ? 0.1 : 1),
+                                options: input.options || (input.type === 'source' ? ['close', 'open', 'high', 'low', 'hl2', 'hlc3', 'ohlc4'] : undefined),
+                            })),
+                            style: [
+                                { key: 'pineColor', label: 'Line Color', type: 'color', default: '#2962FF' },
+                                { key: 'pineLineWidth', label: 'Line Width', type: 'number', min: 1, max: 5, default: 2 },
+                            ],
+                        } : undefined}
                     />
                 );
             })()}
