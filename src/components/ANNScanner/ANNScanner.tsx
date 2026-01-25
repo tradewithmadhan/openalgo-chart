@@ -212,32 +212,64 @@ const ANNScanner: React.FC<ANNScannerProps> = ({
     }, []);
 
     // Auto-refresh interval management
+    // Auto-refresh with visibility detection - pauses when tab is hidden to save CPU
     useEffect(() => {
-        if (intervalRef.current) clearInterval(intervalRef.current);
-        if (countdownRef.current) clearInterval(countdownRef.current);
+        const clearIntervals = () => {
+            if (intervalRef.current) {
+                clearInterval(intervalRef.current);
+                intervalRef.current = null;
+            }
+            if (countdownRef.current) {
+                clearInterval(countdownRef.current);
+                countdownRef.current = null;
+            }
+        };
 
         const config = REFRESH_INTERVALS.find(i => i.id === refreshInterval);
         if (!config || config.ms === 0) {
+            clearIntervals();
             setCountdown(0);
             return;
         }
 
-        setCountdown(Math.floor(config.ms / 1000));
+        const startIntervals = () => {
+            if (countdownRef.current || intervalRef.current) return; // Already running
 
-        countdownRef.current = setInterval(() => {
-            setCountdown(prev => Math.max(0, prev - 1));
-        }, 1000);
+            countdownRef.current = setInterval(() => {
+                // Skip countdown when hidden
+                if (document.visibilityState === 'hidden') return;
+                setCountdown(prev => Math.max(0, prev - 1));
+            }, 1000);
 
-        intervalRef.current = setInterval(() => {
-            if (!isScanning && isAuthenticated) {
-                handleScan();
+            intervalRef.current = setInterval(() => {
+                // Skip scan when hidden
+                if (document.visibilityState === 'hidden') return;
+                if (!isScanning && isAuthenticated) {
+                    handleScan();
+                    setCountdown(Math.floor(config.ms / 1000));
+                }
+            }, config.ms);
+        };
+
+        const handleVisibilityChange = () => {
+            if (document.visibilityState === 'hidden') {
+                clearIntervals();
+            } else {
                 setCountdown(Math.floor(config.ms / 1000));
+                startIntervals();
             }
-        }, config.ms);
+        };
+
+        setCountdown(Math.floor(config.ms / 1000));
+        if (document.visibilityState !== 'hidden') {
+            startIntervals();
+        }
+
+        document.addEventListener('visibilitychange', handleVisibilityChange);
 
         return () => {
-            if (intervalRef.current) clearInterval(intervalRef.current);
-            if (countdownRef.current) clearInterval(countdownRef.current);
+            clearIntervals();
+            document.removeEventListener('visibilitychange', handleVisibilityChange);
         };
     }, [refreshInterval, isScanning, isAuthenticated, handleScan]);
 

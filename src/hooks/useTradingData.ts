@@ -248,19 +248,48 @@ export const useTradingData = (isAuthenticated: boolean): UseTradingDataReturn =
   );
 
   // Initial fetch + backup polling (10 seconds - safety net only)
+  // Pauses when tab is hidden to save CPU
   useEffect(() => {
     if (!isAuthenticated) return;
+
+    let intervalId: ReturnType<typeof setInterval> | null = null;
+
+    const startPolling = () => {
+      if (intervalId) return;
+      logger.debug('[useTradingData] Starting backup polling (10s interval)');
+      intervalId = setInterval(() => fetchData('backup-poll'), 10000);
+    };
+
+    const stopPolling = () => {
+      if (intervalId) {
+        logger.debug('[useTradingData] Stopping backup polling');
+        clearInterval(intervalId);
+        intervalId = null;
+      }
+    };
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'hidden') {
+        stopPolling();
+      } else {
+        fetchData('visibility-resume'); // Immediate refresh when becoming visible
+        startPolling();
+      }
+    };
 
     // Initial fetch
     fetchData('initial');
 
-    // Backup polling every 10 seconds (safety net for missed updates)
-    logger.debug('[useTradingData] Starting backup polling (10s interval)');
-    const intervalId = setInterval(() => fetchData('backup-poll'), 10000);
+    // Only start polling if tab is visible
+    if (document.visibilityState !== 'hidden') {
+      startPolling();
+    }
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
 
     return () => {
-      logger.debug('[useTradingData] Stopping backup polling');
-      clearInterval(intervalId);
+      stopPolling();
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
     };
   }, [isAuthenticated, fetchData]);
 

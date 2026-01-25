@@ -56,25 +56,50 @@ const BottomBar: React.FC<BottomBarProps> = ({
     // WebSocket connection status
     const [connectionStatus, setConnectionStatus] = useState<ConnectionStateType>(ConnectionState.DISCONNECTED);
 
-    // Update times every second
+    // Update times every second - pauses when tab is hidden to save CPU
     useEffect(() => {
-        const timer = setInterval(() => {
-            setLocalTime(new Date());
+        let timer: ReturnType<typeof setInterval> | null = null;
 
-            // Get IST time from shared TimeService
+        const updateTime = () => {
+            setLocalTime(new Date());
             const utcTimestamp = getAccurateUTCTimestamp();
             setIstTime(new Date(utcTimestamp * 1000));
-
-            // Check sync status
             setIsSynced(getIsSynced());
-        }, 1000);
+        };
+
+        const startTimer = () => {
+            if (timer) return;
+            timer = setInterval(updateTime, 1000);
+        };
+
+        const stopTimer = () => {
+            if (timer) {
+                clearInterval(timer);
+                timer = null;
+            }
+        };
+
+        const handleVisibilityChange = () => {
+            if (document.visibilityState === 'hidden') {
+                stopTimer();
+            } else {
+                updateTime(); // Immediate update when becoming visible
+                startTimer();
+            }
+        };
 
         // Initial values
-        const utcTimestamp = getAccurateUTCTimestamp();
-        setIstTime(new Date(utcTimestamp * 1000));
-        setIsSynced(getIsSynced());
+        updateTime();
+        if (document.visibilityState !== 'hidden') {
+            startTimer();
+        }
 
-        return () => clearInterval(timer);
+        document.addEventListener('visibilitychange', handleVisibilityChange);
+
+        return () => {
+            stopTimer();
+            document.removeEventListener('visibilitychange', handleVisibilityChange);
+        };
     }, []);
 
     // Subscribe to WebSocket connection status

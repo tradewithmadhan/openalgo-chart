@@ -921,13 +921,24 @@ const ChartComponent = forwardRef<any, ChartComponentProps>(({
         // Run update after delay to ensure chart is fully rendered
         const timer = setTimeout(updatePanePositions, 500);
 
-        // HIGH FIX ML-9: Track observer timeouts to ensure cleanup
-        const observerTimeouts = new Set<ReturnType<typeof setTimeout>>();
+        // Debounced update - only schedules one update at a time to reduce CPU usage
+        let pendingUpdate: ReturnType<typeof setTimeout> | null = null;
+        const scheduleUpdate = (delay: number) => {
+            // Skip if tab is hidden
+            if (document.visibilityState === 'hidden') return;
+            // Clear any pending update and schedule a new one
+            if (pendingUpdate) clearTimeout(pendingUpdate);
+            pendingUpdate = setTimeout(() => {
+                pendingUpdate = null;
+                if (document.visibilityState !== 'hidden') {
+                    updatePanePositions();
+                }
+            }, delay);
+        };
 
         // Also observe for DOM changes
         const observer = new MutationObserver(() => {
-            const timeoutId = setTimeout(updatePanePositions, 100);
-            observerTimeouts.add(timeoutId);
+            scheduleUpdate(100);
         });
 
         observer.observe(chartContainerRef.current, {
@@ -939,16 +950,13 @@ const ChartComponent = forwardRef<any, ChartComponentProps>(({
 
         // Update on resize
         const resizeObserver = new ResizeObserver(() => {
-            const timeoutId = setTimeout(updatePanePositions, 50);
-            observerTimeouts.add(timeoutId);
+            scheduleUpdate(50);
         });
         resizeObserver.observe(chartContainerRef.current);
 
         return () => {
             clearTimeout(timer);
-            // HIGH FIX ML-9: Clear all observer-created timeouts
-            observerTimeouts.forEach(timeoutId => clearTimeout(timeoutId));
-            observerTimeouts.clear();
+            if (pendingUpdate) clearTimeout(pendingUpdate);
             observer.disconnect();
             resizeObserver.disconnect();
         };
