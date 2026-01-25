@@ -1,10 +1,10 @@
 /**
- * PineScriptEditor - Bottom panel code editor for Pine Script
- * Similar to TradingView's Pine Editor
+ * PineScriptEditor - Right-side panel code editor for Pine Script
+ * TradingView-style Pine Editor with console and error highlighting
  */
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import Editor, { loader, OnMount } from '@monaco-editor/react';
+import Editor, { OnMount } from '@monaco-editor/react';
 import type { editor } from 'monaco-editor';
 import {
     X,
@@ -17,9 +17,9 @@ import {
     Check,
     Trash2,
     Plus,
-    Settings,
-    Code2,
-    Copy,
+    RotateCcw,
+    MoreHorizontal,
+    Terminal,
 } from 'lucide-react';
 import styles from './PineScriptEditor.module.css';
 import {
@@ -31,10 +31,10 @@ import {
 import { pineScriptService, PineScriptInput } from '../../services/pineScriptService';
 import { logger } from '../../utils/logger';
 
-// Storage key for saved scripts
+// Storage keys
 const STORAGE_KEY = 'openalgo_pine_scripts';
 const CURRENT_SCRIPT_KEY = 'openalgo_pine_current';
-const EDITOR_HEIGHT_KEY = 'openalgo_pine_editor_height';
+const EDITOR_WIDTH_KEY = 'openalgo_pine_editor_width';
 
 interface SavedScript {
     id: string;
@@ -48,6 +48,18 @@ interface ValidationResult {
     valid: boolean;
     errors: string[];
     warnings: string[];
+}
+
+interface ConsoleMessage {
+    id: number;
+    timestamp: Date;
+    type: 'info' | 'error' | 'success' | 'warning';
+    message: string;
+}
+
+interface CursorPosition {
+    lineNumber: number;
+    column: number;
 }
 
 export interface PineScriptEditorProps {
@@ -65,15 +77,22 @@ const PineScriptEditor: React.FC<PineScriptEditorProps> = ({
 }) => {
     // Editor state
     const [code, setCode] = useState<string>(DEFAULT_PINE_SCRIPT);
-    const [scriptName, setScriptName] = useState<string>('Untitled');
+    const [scriptName, setScriptName] = useState<string>('Untitled script');
     const [currentScriptId, setCurrentScriptId] = useState<string | null>(null);
     const [isDirty, setIsDirty] = useState<boolean>(false);
 
     // UI state
-    const [editorHeight, setEditorHeight] = useState<number>(300);
-    const [isMinimized, setIsMinimized] = useState<boolean>(false);
+    const [editorWidth, setEditorWidth] = useState<number>(500);
     const [showScriptMenu, setShowScriptMenu] = useState<boolean>(false);
-    const [showTemplateMenu, setShowTemplateMenu] = useState<boolean>(false);
+    const [showConsole, setShowConsole] = useState<boolean>(true);
+    const [consoleHeight, setConsoleHeight] = useState<number>(150);
+
+    // Cursor position
+    const [cursorPosition, setCursorPosition] = useState<CursorPosition>({ lineNumber: 1, column: 1 });
+
+    // Console messages
+    const [consoleMessages, setConsoleMessages] = useState<ConsoleMessage[]>([]);
+    const consoleIdRef = useRef<number>(0);
 
     // Validation state
     const [validation, setValidation] = useState<ValidationResult>({
@@ -88,9 +107,32 @@ const PineScriptEditor: React.FC<PineScriptEditorProps> = ({
 
     // Refs
     const editorRef = useRef<editor.IStandaloneCodeEditor | null>(null);
+    const monacoRef = useRef<any>(null);
     const containerRef = useRef<HTMLDivElement>(null);
-    const resizeRef = useRef<HTMLDivElement>(null);
     const isResizing = useRef<boolean>(false);
+    const isConsoleResizing = useRef<boolean>(false);
+    const consoleRef = useRef<HTMLDivElement>(null);
+
+    // Add console message helper
+    const addConsoleMessage = useCallback((type: ConsoleMessage['type'], message: string) => {
+        const newMessage: ConsoleMessage = {
+            id: ++consoleIdRef.current,
+            timestamp: new Date(),
+            type,
+            message,
+        };
+        setConsoleMessages(prev => [...prev.slice(-100), newMessage]); // Keep last 100 messages
+    }, []);
+
+    // Format timestamp for console
+    const formatTime = (date: Date): string => {
+        return date.toLocaleTimeString('en-US', {
+            hour: 'numeric',
+            minute: '2-digit',
+            second: '2-digit',
+            hour12: true,
+        });
+    };
 
     // Load saved scripts from localStorage
     useEffect(() => {
@@ -105,19 +147,22 @@ const PineScriptEditor: React.FC<PineScriptEditorProps> = ({
             if (current) {
                 const parsed = JSON.parse(current);
                 setCode(parsed.code || DEFAULT_PINE_SCRIPT);
-                setScriptName(parsed.name || 'Untitled');
+                setScriptName(parsed.name || 'Untitled script');
                 setCurrentScriptId(parsed.id || null);
             }
 
-            // Load editor height
-            const height = localStorage.getItem(EDITOR_HEIGHT_KEY);
-            if (height) {
-                setEditorHeight(parseInt(height, 10));
+            // Load editor width
+            const width = localStorage.getItem(EDITOR_WIDTH_KEY);
+            if (width) {
+                setEditorWidth(parseInt(width, 10));
             }
+
+            // Add initial console message
+            addConsoleMessage('info', '"Untitled script" opened');
         } catch (e) {
             logger.error('Failed to load Pine Script data:', e);
         }
-    }, []);
+    }, [addConsoleMessage]);
 
     // Save current script to localStorage when changed
     useEffect(() => {
@@ -135,7 +180,7 @@ const PineScriptEditor: React.FC<PineScriptEditorProps> = ({
         }
     }, [code, scriptName, currentScriptId]);
 
-    // Validate code on change
+    // Validate code and update error markers
     useEffect(() => {
         const result = pineScriptService.validate(code);
         setValidation(result);
@@ -149,17 +194,67 @@ const PineScriptEditor: React.FC<PineScriptEditorProps> = ({
         if (info.name && info.name !== 'Custom Indicator' && !currentScriptId) {
             setScriptName(info.name);
         }
+
+        // Update error markers in Monaco editor
+        if (editorRef.current && monacoRef.current) {
+            const model = editorRef.current.getModel();
+            if (model) {
+                const markers: editor.IMarkerData[] = result.errors.map((error, index) => {
+                    // Try to parse line number from error message
+                    const lineMatch = error.match(/line\s+(\d+)/i) || error.match(/at\s+(\d+):(\d+)/);
+                    const line = lineMatch ? parseInt(lineMatch[1], 10) : 1;
+                    const col = lineMatch && lineMatch[2] ? parseInt(lineMatch[2], 10) : 1;
+
+                    return {
+                        severity: monacoRef.current.MarkerSeverity.Error,
+                        message: error,
+                        startLineNumber: line,
+                        startColumn: col,
+                        endLineNumber: line,
+                        endColumn: model.getLineMaxColumn(line),
+                    };
+                });
+
+                monacoRef.current.editor.setModelMarkers(model, 'pine-script', markers);
+            }
+        }
     }, [code, currentScriptId]);
 
     // Handle Monaco editor mount
     const handleEditorMount: OnMount = useCallback((editor, monaco) => {
         editorRef.current = editor;
+        monacoRef.current = monaco;
 
         // Register Pine Script language
         registerPineScriptLanguage(monaco);
 
         // Set theme
         monaco.editor.setTheme('pine-dark');
+
+        // Track cursor position
+        editor.onDidChangeCursorPosition((e) => {
+            setCursorPosition({
+                lineNumber: e.position.lineNumber,
+                column: e.position.column,
+            });
+        });
+
+        // Handle paste - ensure it works properly
+        editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyV, () => {
+            navigator.clipboard.readText().then(text => {
+                const selection = editor.getSelection();
+                if (selection) {
+                    editor.executeEdits('paste', [{
+                        range: selection,
+                        text: text,
+                        forceMoveMarkers: true,
+                    }]);
+                }
+            }).catch(() => {
+                // Fallback to default paste
+                document.execCommand('paste');
+            });
+        });
 
         // Focus editor
         editor.focus();
@@ -171,19 +266,20 @@ const PineScriptEditor: React.FC<PineScriptEditorProps> = ({
         setIsDirty(true);
     }, []);
 
-    // Handle resize
+    // Handle horizontal resize (width)
     useEffect(() => {
         const handleMouseMove = (e: MouseEvent) => {
-            if (!isResizing.current) return;
-
-            const container = containerRef.current;
-            if (!container) return;
-
-            const rect = container.getBoundingClientRect();
-            const newHeight = rect.bottom - e.clientY;
-            const clampedHeight = Math.max(150, Math.min(600, newHeight));
-
-            setEditorHeight(clampedHeight);
+            if (isResizing.current) {
+                const newWidth = window.innerWidth - e.clientX;
+                const clampedWidth = Math.max(350, Math.min(800, newWidth));
+                setEditorWidth(clampedWidth);
+            }
+            if (isConsoleResizing.current && consoleRef.current) {
+                const consoleRect = consoleRef.current.getBoundingClientRect();
+                const newHeight = consoleRect.bottom - e.clientY;
+                const clampedHeight = Math.max(80, Math.min(300, newHeight));
+                setConsoleHeight(clampedHeight);
+            }
         };
 
         const handleMouseUp = () => {
@@ -191,9 +287,12 @@ const PineScriptEditor: React.FC<PineScriptEditorProps> = ({
                 isResizing.current = false;
                 document.body.style.cursor = '';
                 document.body.style.userSelect = '';
-
-                // Save height
-                localStorage.setItem(EDITOR_HEIGHT_KEY, editorHeight.toString());
+                localStorage.setItem(EDITOR_WIDTH_KEY, editorWidth.toString());
+            }
+            if (isConsoleResizing.current) {
+                isConsoleResizing.current = false;
+                document.body.style.cursor = '';
+                document.body.style.userSelect = '';
             }
         };
 
@@ -204,11 +303,18 @@ const PineScriptEditor: React.FC<PineScriptEditorProps> = ({
             document.removeEventListener('mousemove', handleMouseMove);
             document.removeEventListener('mouseup', handleMouseUp);
         };
-    }, [editorHeight]);
+    }, [editorWidth]);
 
     const startResize = useCallback((e: React.MouseEvent) => {
         e.preventDefault();
         isResizing.current = true;
+        document.body.style.cursor = 'ew-resize';
+        document.body.style.userSelect = 'none';
+    }, []);
+
+    const startConsoleResize = useCallback((e: React.MouseEvent) => {
+        e.preventDefault();
+        isConsoleResizing.current = true;
         document.body.style.cursor = 'ns-resize';
         document.body.style.userSelect = 'none';
     }, []);
@@ -216,11 +322,12 @@ const PineScriptEditor: React.FC<PineScriptEditorProps> = ({
     // Script actions
     const handleNew = useCallback(() => {
         setCode(DEFAULT_PINE_SCRIPT);
-        setScriptName('Untitled');
+        setScriptName('Untitled script');
         setCurrentScriptId(null);
         setIsDirty(false);
         setShowScriptMenu(false);
-    }, []);
+        addConsoleMessage('info', '"Untitled script" opened');
+    }, [addConsoleMessage]);
 
     const handleSave = useCallback(() => {
         const now = Date.now();
@@ -244,10 +351,12 @@ const PineScriptEditor: React.FC<PineScriptEditorProps> = ({
 
         try {
             localStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
+            addConsoleMessage('success', `Script "${scriptName}" saved`);
         } catch (e) {
             logger.error('Failed to save script:', e);
+            addConsoleMessage('error', 'Failed to save script');
         }
-    }, [code, scriptName, currentScriptId, savedScripts]);
+    }, [code, scriptName, currentScriptId, savedScripts, addConsoleMessage]);
 
     const handleLoadScript = useCallback((script: SavedScript) => {
         setCode(script.code);
@@ -255,11 +364,13 @@ const PineScriptEditor: React.FC<PineScriptEditorProps> = ({
         setCurrentScriptId(script.id);
         setIsDirty(false);
         setShowScriptMenu(false);
-    }, []);
+        addConsoleMessage('info', `"${script.name}" opened`);
+    }, [addConsoleMessage]);
 
     const handleDeleteScript = useCallback(
         (scriptId: string, e: React.MouseEvent) => {
             e.stopPropagation();
+            const script = savedScripts.find(s => s.id === scriptId);
             const updated = savedScripts.filter((s) => s.id !== scriptId);
             setSavedScripts(updated);
 
@@ -269,273 +380,294 @@ const PineScriptEditor: React.FC<PineScriptEditorProps> = ({
 
             try {
                 localStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
+                if (script) {
+                    addConsoleMessage('info', `Script "${script.name}" deleted`);
+                }
             } catch (e) {
                 logger.error('Failed to delete script:', e);
             }
         },
-        [savedScripts, currentScriptId, handleNew]
+        [savedScripts, currentScriptId, handleNew, addConsoleMessage]
     );
 
-    const handleLoadTemplate = useCallback((templateKey: string) => {
-        const template = PINE_TEMPLATES[templateKey as keyof typeof PINE_TEMPLATES];
-        if (template) {
-            setCode(template.code);
-            setScriptName(template.name);
-            setCurrentScriptId(null);
-            setIsDirty(true);
-        }
-        setShowTemplateMenu(false);
-    }, []);
-
     const handleAddToChart = useCallback(() => {
+        addConsoleMessage('info', 'Compiling...');
+
         if (!validation.valid) {
+            validation.errors.forEach(error => {
+                addConsoleMessage('error', error);
+            });
             return;
         }
+
+        addConsoleMessage('success', 'Compiled.');
         onAddToChart(code, parsedInputs);
-    }, [code, parsedInputs, validation.valid, onAddToChart]);
+        addConsoleMessage('success', 'Added to chart.');
+    }, [code, parsedInputs, validation, onAddToChart, addConsoleMessage]);
 
-    const handleOpenSettings = useCallback(() => {
-        if (onOpenSettings && parsedInputs.length > 0) {
-            onOpenSettings(parsedInputs);
-        }
-    }, [parsedInputs, onOpenSettings]);
-
-    const handleCopyCode = useCallback(() => {
-        navigator.clipboard.writeText(code).catch((e) => {
-            logger.error('Failed to copy code:', e);
-        });
-    }, [code]);
+    const handleClearConsole = useCallback(() => {
+        setConsoleMessages([]);
+    }, []);
 
     // Close menus on outside click
     useEffect(() => {
-        const handleClickOutside = (e: MouseEvent) => {
-            if (showScriptMenu || showTemplateMenu) {
+        const handleClickOutside = () => {
+            if (showScriptMenu) {
                 setShowScriptMenu(false);
-                setShowTemplateMenu(false);
             }
         };
 
         document.addEventListener('click', handleClickOutside);
         return () => document.removeEventListener('click', handleClickOutside);
-    }, [showScriptMenu, showTemplateMenu]);
+    }, [showScriptMenu]);
+
+    // Auto-scroll console to bottom
+    useEffect(() => {
+        if (consoleRef.current) {
+            consoleRef.current.scrollTop = consoleRef.current.scrollHeight;
+        }
+    }, [consoleMessages]);
 
     if (!isOpen) return null;
+
+    const errorCount = validation.errors.length;
 
     return (
         <div
             ref={containerRef}
             className={styles.container}
-            style={{ height: isMinimized ? 40 : editorHeight + 80 }}
+            style={{ width: editorWidth }}
         >
-            {/* Resize handle */}
-            <div ref={resizeRef} className={styles.resizeHandle} onMouseDown={startResize}>
-                <div className={styles.resizeGrip} />
-            </div>
+            {/* Resize handle (left edge) */}
+            <div className={styles.resizeHandle} onMouseDown={startResize} />
 
             {/* Header */}
             <div className={styles.header}>
                 <div className={styles.headerLeft}>
-                    <Code2 size={16} className={styles.headerIcon} />
-                    <span className={styles.title}>Pine Editor</span>
-                    <span className={styles.scriptName}>
-                        {scriptName}
-                        {isDirty && <span className={styles.dirtyIndicator}>*</span>}
-                    </span>
-                </div>
-
-                <div className={styles.headerActions}>
-                    {/* New button */}
-                    <button className={styles.actionBtn} onClick={handleNew} title="New Script">
-                        <Plus size={14} />
-                    </button>
-
-                    {/* Open menu */}
+                    {/* Script name dropdown */}
                     <div className={styles.dropdownContainer}>
                         <button
-                            className={styles.actionBtn}
+                            className={styles.scriptNameBtn}
                             onClick={(e) => {
                                 e.stopPropagation();
                                 setShowScriptMenu(!showScriptMenu);
-                                setShowTemplateMenu(false);
                             }}
-                            title="Open Script"
                         >
-                            <FileText size={14} />
-                            <ChevronDown size={12} />
+                            {scriptName}
+                            {isDirty && <span className={styles.dirtyIndicator}>*</span>}
+                            <ChevronDown size={14} />
                         </button>
                         {showScriptMenu && (
                             <div className={styles.dropdown} onClick={(e) => e.stopPropagation()}>
-                                <div className={styles.dropdownHeader}>Saved Scripts</div>
+                                <div
+                                    className={styles.dropdownItem}
+                                    onClick={handleNew}
+                                >
+                                    <Plus size={14} />
+                                    <span>New script</span>
+                                </div>
+                                <div className={styles.dropdownDivider} />
                                 {savedScripts.length === 0 ? (
                                     <div className={styles.dropdownEmpty}>No saved scripts</div>
                                 ) : (
-                                    savedScripts.map((script) => (
-                                        <div
-                                            key={script.id}
-                                            className={styles.dropdownItem}
-                                            onClick={() => handleLoadScript(script)}
-                                        >
-                                            <span>{script.name}</span>
-                                            <button
-                                                className={styles.deleteBtn}
-                                                onClick={(e) => handleDeleteScript(script.id, e)}
-                                                title="Delete"
+                                    <>
+                                        <div className={styles.dropdownHeader}>Saved Scripts</div>
+                                        {savedScripts.map((script) => (
+                                            <div
+                                                key={script.id}
+                                                className={`${styles.dropdownItem} ${script.id === currentScriptId ? styles.dropdownItemActive : ''}`}
+                                                onClick={() => handleLoadScript(script)}
                                             >
-                                                <Trash2 size={12} />
-                                            </button>
-                                        </div>
-                                    ))
+                                                <FileText size={14} />
+                                                <span>{script.name}</span>
+                                                <button
+                                                    className={styles.deleteBtn}
+                                                    onClick={(e) => handleDeleteScript(script.id, e)}
+                                                    title="Delete"
+                                                >
+                                                    <Trash2 size={12} />
+                                                </button>
+                                            </div>
+                                        ))}
+                                    </>
                                 )}
-                            </div>
-                        )}
-                    </div>
-
-                    {/* Templates menu */}
-                    <div className={styles.dropdownContainer}>
-                        <button
-                            className={styles.actionBtn}
-                            onClick={(e) => {
-                                e.stopPropagation();
-                                setShowTemplateMenu(!showTemplateMenu);
-                                setShowScriptMenu(false);
-                            }}
-                            title="Templates"
-                        >
-                            Templates
-                            <ChevronDown size={12} />
-                        </button>
-                        {showTemplateMenu && (
-                            <div className={styles.dropdown} onClick={(e) => e.stopPropagation()}>
-                                <div className={styles.dropdownHeader}>Built-in Templates</div>
+                                <div className={styles.dropdownDivider} />
+                                <div className={styles.dropdownHeader}>Templates</div>
                                 {Object.entries(PINE_TEMPLATES).map(([key, template]) => (
                                     <div
                                         key={key}
                                         className={styles.dropdownItem}
-                                        onClick={() => handleLoadTemplate(key)}
+                                        onClick={() => {
+                                            setCode(template.code);
+                                            setScriptName(template.name);
+                                            setCurrentScriptId(null);
+                                            setIsDirty(true);
+                                            setShowScriptMenu(false);
+                                            addConsoleMessage('info', `Template "${template.name}" loaded`);
+                                        }}
                                     >
-                                        {template.name}
+                                        <FileText size={14} />
+                                        <span>{template.name}</span>
                                     </div>
                                 ))}
                             </div>
                         )}
                     </div>
 
+                    {/* Reload button */}
+                    <button
+                        className={styles.iconBtn}
+                        onClick={() => {
+                            if (editorRef.current) {
+                                editorRef.current.setValue(code);
+                                addConsoleMessage('info', 'Script reloaded');
+                            }
+                        }}
+                        title="Reload"
+                    >
+                        <RotateCcw size={14} />
+                    </button>
+
                     {/* Save button */}
-                    <button className={styles.actionBtn} onClick={handleSave} title="Save Script">
+                    <button
+                        className={styles.headerBtn}
+                        onClick={handleSave}
+                        title="Save Script"
+                    >
                         <Save size={14} />
+                        Save
                     </button>
+                </div>
 
-                    {/* Copy button */}
-                    <button className={styles.actionBtn} onClick={handleCopyCode} title="Copy Code">
-                        <Copy size={14} />
-                    </button>
-
-                    <div className={styles.separator} />
-
+                <div className={styles.headerRight}>
                     {/* Add to Chart button */}
                     <button
-                        className={`${styles.actionBtn} ${styles.primaryBtn}`}
+                        className={styles.primaryBtn}
                         onClick={handleAddToChart}
                         disabled={!validation.valid}
                         title="Add to Chart"
                     >
                         <Play size={14} />
-                        Add to Chart
+                        Add to chart
                     </button>
 
-                    {/* Settings button */}
-                    {parsedInputs.length > 0 && (
-                        <button
-                            className={styles.actionBtn}
-                            onClick={handleOpenSettings}
-                            title="Indicator Settings"
-                        >
-                            <Settings size={14} />
-                        </button>
-                    )}
-
-                    <div className={styles.separator} />
-
-                    {/* Minimize/Maximize */}
-                    <button
-                        className={styles.actionBtn}
-                        onClick={() => setIsMinimized(!isMinimized)}
-                        title={isMinimized ? 'Expand' : 'Collapse'}
-                    >
-                        {isMinimized ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+                    {/* More options */}
+                    <button className={styles.iconBtn} title="More options">
+                        <MoreHorizontal size={16} />
                     </button>
 
                     {/* Close button */}
-                    <button className={styles.actionBtn} onClick={onClose} title="Close">
-                        <X size={14} />
+                    <button className={styles.iconBtn} onClick={onClose} title="Close">
+                        <X size={16} />
                     </button>
                 </div>
             </div>
 
-            {/* Editor */}
-            {!isMinimized && (
-                <>
-                    <div className={styles.editorContainer} style={{ height: editorHeight }}>
-                        <Editor
-                            height="100%"
-                            language={PINE_SCRIPT_LANGUAGE_ID}
-                            value={code}
-                            onChange={handleCodeChange}
-                            onMount={handleEditorMount}
-                            theme="pine-dark"
-                            options={{
-                                minimap: { enabled: false },
-                                fontSize: 13,
-                                lineNumbers: 'on',
-                                scrollBeyondLastLine: false,
-                                wordWrap: 'on',
-                                automaticLayout: true,
-                                tabSize: 4,
-                                insertSpaces: true,
-                                folding: true,
-                                renderWhitespace: 'selection',
-                                scrollbar: {
-                                    vertical: 'auto',
-                                    horizontal: 'auto',
-                                    verticalScrollbarSize: 10,
-                                    horizontalScrollbarSize: 10,
-                                },
-                            }}
-                            loading={<div className={styles.loading}>Loading editor...</div>}
-                        />
-                    </div>
+            {/* Editor area */}
+            <div className={styles.editorWrapper}>
+                <div
+                    className={styles.editorContainer}
+                    style={{ height: showConsole ? `calc(100% - ${consoleHeight}px)` : '100%' }}
+                >
+                    <Editor
+                        height="100%"
+                        language={PINE_SCRIPT_LANGUAGE_ID}
+                        value={code}
+                        onChange={handleCodeChange}
+                        onMount={handleEditorMount}
+                        theme="pine-dark"
+                        options={{
+                            minimap: { enabled: false },
+                            fontSize: 13,
+                            fontFamily: "'Consolas', 'Monaco', 'Courier New', monospace",
+                            lineNumbers: 'on',
+                            scrollBeyondLastLine: false,
+                            wordWrap: 'on',
+                            automaticLayout: true,
+                            tabSize: 4,
+                            insertSpaces: true,
+                            folding: true,
+                            renderWhitespace: 'selection',
+                            glyphMargin: true,
+                            lineDecorationsWidth: 5,
+                            scrollbar: {
+                                vertical: 'auto',
+                                horizontal: 'auto',
+                                verticalScrollbarSize: 10,
+                                horizontalScrollbarSize: 10,
+                            },
+                            overviewRulerBorder: false,
+                            hideCursorInOverviewRuler: true,
+                            renderLineHighlight: 'line',
+                            cursorBlinking: 'smooth',
+                            cursorSmoothCaretAnimation: 'on',
+                            smoothScrolling: true,
+                            contextmenu: true,
+                            mouseWheelZoom: true,
+                            quickSuggestions: true,
+                            suggestOnTriggerCharacters: true,
+                            acceptSuggestionOnEnter: 'on',
+                            snippetSuggestions: 'inline',
+                        }}
+                        loading={<div className={styles.loading}>Loading editor...</div>}
+                    />
+                </div>
 
-                    {/* Status bar */}
-                    <div className={styles.statusBar}>
-                        <div className={styles.statusLeft}>
-                            {validation.valid ? (
-                                <span className={styles.statusSuccess}>
-                                    <Check size={12} />
-                                    Ready
-                                </span>
-                            ) : (
-                                <span className={styles.statusError}>
-                                    <AlertCircle size={12} />
-                                    {validation.errors[0]}
-                                </span>
-                            )}
-                            {validation.warnings.length > 0 && (
-                                <span className={styles.statusWarning}>
-                                    {validation.warnings[0]}
-                                </span>
-                            )}
-                        </div>
-                        <div className={styles.statusRight}>
-                            {parsedInputs.length > 0 && (
-                                <span className={styles.statusInfo}>
-                                    {parsedInputs.length} input{parsedInputs.length !== 1 ? 's' : ''}
-                                </span>
-                            )}
-                            <span className={styles.statusInfo}>Pine Script v5</span>
+                {/* Console panel */}
+                {showConsole && (
+                    <div
+                        className={styles.consoleContainer}
+                        style={{ height: consoleHeight }}
+                    >
+                        {/* Console resize handle */}
+                        <div
+                            className={styles.consoleResizeHandle}
+                            onMouseDown={startConsoleResize}
+                        />
+
+                        {/* Console content */}
+                        <div className={styles.consoleContent} ref={consoleRef}>
+                            {consoleMessages.map((msg) => (
+                                <div
+                                    key={msg.id}
+                                    className={`${styles.consoleLine} ${styles[`console${msg.type.charAt(0).toUpperCase() + msg.type.slice(1)}`]}`}
+                                >
+                                    <span className={styles.consoleTime}>{formatTime(msg.timestamp)}</span>
+                                    {msg.type === 'error' && <AlertCircle size={12} className={styles.consoleIcon} />}
+                                    <span className={styles.consoleMessage}>{msg.message}</span>
+                                </div>
+                            ))}
                         </div>
                     </div>
-                </>
-            )}
+                )}
+            </div>
+
+            {/* Status bar */}
+            <div className={styles.statusBar}>
+                <div className={styles.statusLeft}>
+                    <button
+                        className={`${styles.consoleToggle} ${showConsole ? styles.consoleToggleActive : ''}`}
+                        onClick={() => setShowConsole(!showConsole)}
+                        title={showConsole ? 'Hide console' : 'Show console'}
+                    >
+                        <Terminal size={12} />
+                        {showConsole ? 'Close console' : 'Open console'}
+                    </button>
+                    <span className={styles.shortcut}>Ctrl + `</span>
+                </div>
+                <div className={styles.statusRight}>
+                    {errorCount > 0 && (
+                        <span className={styles.errorCount}>
+                            <AlertCircle size={12} />
+                            {errorCount} {errorCount === 1 ? 'error' : 'errors'}
+                        </span>
+                    )}
+                    <span className={styles.cursorPosition}>
+                        Line {cursorPosition.lineNumber}, Col {cursorPosition.column}
+                    </span>
+                    <span className={styles.pineVersion}>Pine Script® v5</span>
+                </div>
+            </div>
         </div>
     );
 };
