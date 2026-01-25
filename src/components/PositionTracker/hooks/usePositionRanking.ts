@@ -6,45 +6,80 @@
 import { useMemo, useRef, useEffect } from 'react';
 import { getSector } from '../sectorMapping';
 
+export interface WatchlistItem {
+    symbol: string;
+    exchange?: string;
+    last?: string | number;
+    open?: string | number;
+    volume?: string | number;
+    chgP?: string | number;
+    [key: string]: any;
+}
+
+export interface CustomSymbol {
+    symbol: string;
+    exchange?: string;
+}
+
+export interface RankedItem {
+    symbol: string;
+    exchange: string;
+    ltp: number;
+    openPrice: number;
+    volume: number;
+    percentChange: number;
+    sector: string;
+    currentRank: number;
+    previousRank: number;
+    rankChange: number;
+}
+
+export interface DisplayItem extends RankedItem {
+    isVolumeSpike: boolean;
+}
+
+export interface UsePositionRankingReturn {
+    rankedData: RankedItem[];
+    displayData: DisplayItem[];
+}
+
 /**
  * Calculate % change from opening price (intraday)
- * @param {Object} item - Stock item
- * @returns {number} Percentage change
  */
-export const calculateIntradayChange = (item) => {
-    const ltp = parseFloat(item.last) || 0;
-    const openPrice = parseFloat(item.open) || 0;
+export const calculateIntradayChange = (item: WatchlistItem): number => {
+    const ltp = parseFloat(String(item.last)) || 0;
+    const openPrice = parseFloat(String(item.open)) || 0;
 
     if (openPrice > 0 && ltp > 0) {
         return ((ltp - openPrice) / openPrice) * 100;
     }
-    return parseFloat(item.chgP) || 0;
+    return parseFloat(String(item.chgP)) || 0;
 };
 
 /**
  * Hook for position ranking logic
- * @param {Array} watchlistData - Live watchlist data
- * @param {string} sourceMode - 'watchlist' or 'custom'
- * @param {Array} customSymbols - Custom symbol list
- * @param {boolean} isMarketOpen - Whether market is open
- * @returns {Object} { rankedData, displayData }
  */
-export const usePositionRanking = (watchlistData, sourceMode, customSymbols, isMarketOpen) => {
-    const previousRanksRef = useRef(new Map());
-    const openingRanksRef = useRef(new Map());
-    const hasSetOpeningRanks = useRef(false);
+export const usePositionRanking = (
+    watchlistData: WatchlistItem[],
+    sourceMode: 'watchlist' | 'custom' | string,
+    customSymbols: CustomSymbol[],
+    isMarketOpen: boolean
+): UsePositionRankingReturn => {
+    const previousRanksRef = useRef<Map<string, number>>(new Map());
+    const openingRanksRef = useRef<Map<string, number>>(new Map());
+    const hasSetOpeningRanks = useRef<boolean>(false);
 
     // Process and rank the data
     const rankedData = useMemo(() => {
-        let dataToRank = [];
+        let dataToRank: Array<Omit<RankedItem, 'currentRank' | 'previousRank' | 'rankChange'>> = [];
 
         if (sourceMode === 'watchlist') {
             dataToRank = (watchlistData || []).map(item => ({
                 symbol: item.symbol,
                 exchange: item.exchange || 'NSE',
-                ltp: parseFloat(item.last) || 0,
-                openPrice: parseFloat(item.open) || 0,
-                volume: parseFloat(item.volume) || 0,
+                ltp: parseFloat(String(item.last)) || 0,
+                openPrice: parseFloat(String(item.open)) || 0,
+                volume: parseFloat(String(item.volume)) || 0,
                 percentChange: calculateIntradayChange(item),
                 sector: getSector(item.symbol),
             }));
@@ -57,9 +92,9 @@ export const usePositionRanking = (watchlistData, sourceMode, customSymbols, isM
                 .map(item => ({
                     symbol: item.symbol,
                     exchange: item.exchange || 'NSE',
-                    ltp: parseFloat(item.last) || 0,
-                    openPrice: parseFloat(item.open) || 0,
-                    volume: parseFloat(item.volume) || 0,
+                    ltp: parseFloat(String(item.last)) || 0,
+                    openPrice: parseFloat(String(item.open)) || 0,
+                    volume: parseFloat(String(item.volume)) || 0,
                     percentChange: calculateIntradayChange(item),
                     sector: getSector(item.symbol),
                 }));
@@ -69,7 +104,7 @@ export const usePositionRanking = (watchlistData, sourceMode, customSymbols, isM
         const sorted = [...dataToRank].sort((a, b) => b.percentChange - a.percentChange);
 
         // Calculate ranks
-        return sorted.map((item, index) => {
+        return sorted.map((item, index): RankedItem => {
             const key = `${item.symbol}-${item.exchange}`;
             const previousRank = previousRanksRef.current.get(key) ?? (index + 1);
             const currentRank = index + 1;
@@ -103,7 +138,7 @@ export const usePositionRanking = (watchlistData, sourceMode, customSymbols, isM
     }, [isMarketOpen, rankedData]);
 
     // Calculate rank change from opening and volume spike detection
-    const displayData = useMemo(() => {
+    const displayData = useMemo((): DisplayItem[] => {
         const totalVolume = rankedData.reduce((sum, item) => sum + (item.volume || 0), 0);
         const avgVolume = rankedData.length > 0 ? totalVolume / rankedData.length : 0;
         const spikeThreshold = avgVolume * 2;

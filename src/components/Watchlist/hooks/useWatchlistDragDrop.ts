@@ -4,24 +4,44 @@
  */
 import { useState, useCallback } from 'react';
 
+export interface WatchlistItem {
+    symbol?: string;
+    exchange?: string;
+    isSection?: boolean;
+    title?: string;
+    [key: string]: any;
+}
+
+export interface UseWatchlistDragDropReturn {
+    draggedIndex: number | null;
+    draggedSection: string | null;
+    handleDragStart: (e: React.DragEvent, index: number) => void;
+    handleDragOver: (e: React.DragEvent) => void;
+    handleDragEnd: () => void;
+    handleDrop: (e: React.DragEvent, dropIndex: number) => void;
+    handleSectionDragStart: (e: React.DragEvent, sectionTitle: string, sectionIdx: number) => void;
+    handleSectionDragEnd: () => void;
+    handleSectionDrop: (e: React.DragEvent, sectionIndex: number) => void;
+}
+
 /**
  * Hook for managing watchlist drag and drop
- * @param {Array} items - Watchlist items array
- * @param {Function} onReorder - Callback when items are reordered
- * @returns {Object} Drag and drop state and handlers
  */
-export const useWatchlistDragDrop = (items, onReorder) => {
-    const [draggedIndex, setDraggedIndex] = useState(null);
-    const [draggedSection, setDraggedSection] = useState(null);
+export const useWatchlistDragDrop = (
+    items: WatchlistItem[],
+    onReorder?: (items: WatchlistItem[]) => void
+): UseWatchlistDragDropReturn => {
+    const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
+    const [draggedSection, setDraggedSection] = useState<string | null>(null);
 
     // Item drag handlers
-    const handleDragStart = useCallback((e, index) => {
+    const handleDragStart = useCallback((e: React.DragEvent, index: number) => {
         setDraggedIndex(index);
         e.dataTransfer.effectAllowed = "move";
         e.dataTransfer.setData('text/plain', index.toString());
     }, []);
 
-    const handleDragOver = useCallback((e) => {
+    const handleDragOver = useCallback((e: React.DragEvent) => {
         e.preventDefault();
         e.stopPropagation();
         e.dataTransfer.dropEffect = "move";
@@ -31,7 +51,7 @@ export const useWatchlistDragDrop = (items, onReorder) => {
         setDraggedIndex(null);
     }, []);
 
-    const handleDrop = useCallback((e, dropIndex) => {
+    const handleDrop = useCallback((e: React.DragEvent, dropIndex: number) => {
         e.preventDefault();
         e.stopPropagation();
 
@@ -49,7 +69,7 @@ export const useWatchlistDragDrop = (items, onReorder) => {
     }, [draggedIndex, items, onReorder]);
 
     // Section drag handlers
-    const handleSectionDragStart = useCallback((e, sectionTitle, sectionIdx) => {
+    const handleSectionDragStart = useCallback((e: React.DragEvent, sectionTitle: string, sectionIdx: number) => {
         setDraggedSection(sectionTitle);
         setDraggedIndex(sectionIdx);
         e.dataTransfer.effectAllowed = "move";
@@ -61,7 +81,7 @@ export const useWatchlistDragDrop = (items, onReorder) => {
         setDraggedIndex(null);
     }, []);
 
-    const handleSectionDrop = useCallback((e, sectionIndex) => {
+    const handleSectionDrop = useCallback((e: React.DragEvent, sectionIndex: number) => {
         e.preventDefault();
         e.stopPropagation();
 
@@ -74,11 +94,9 @@ export const useWatchlistDragDrop = (items, onReorder) => {
             return;
         }
 
-        // Move the dragged item to right after the section header
         const newItems = [...items];
         const [draggedItem] = newItems.splice(draggedIdx, 1);
 
-        // Insert right after the section marker
         const insertIndex = draggedIdx < sectionIndex ? sectionIndex : sectionIndex + 1;
         newItems.splice(insertIndex, 0, draggedItem);
 
@@ -88,15 +106,12 @@ export const useWatchlistDragDrop = (items, onReorder) => {
     }, [items, onReorder]);
 
     return {
-        // State
         draggedIndex,
         draggedSection,
-        // Item handlers
         handleDragStart,
         handleDragOver,
         handleDragEnd,
         handleDrop,
-        // Section handlers
         handleSectionDragStart,
         handleSectionDragEnd,
         handleSectionDrop,

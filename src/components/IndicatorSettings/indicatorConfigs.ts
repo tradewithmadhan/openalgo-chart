@@ -3,8 +3,28 @@
  * Defines Inputs and Style fields for each indicator type
  */
 
+export interface ConfigField {
+    key: string;
+    label: string;
+    type: 'number' | 'color' | 'boolean' | 'select' | 'text';
+    min?: number;
+    max?: number;
+    step?: number;
+    default: any;
+    options?: string[] | Array<{ value: string; label: string }>;
+}
 
-export const indicatorConfigs = {
+export interface IndicatorConfigDefinition {
+    name: string;
+    fullName: string;
+    pane: string;
+    category?: string;
+    description?: string;
+    inputs: ConfigField[];
+    style: ConfigField[];
+}
+
+export const indicatorConfigs: Record<string, IndicatorConfigDefinition> = {
     ema: {
         name: 'EMA',
         fullName: 'Exponential Moving Average',
@@ -346,7 +366,7 @@ export const indicatorConfigs = {
             { key: 'entryPrice', label: 'Entry Price', type: 'number', min: 0, step: 0.01, default: 0 },
             { key: 'stopLossPrice', label: 'Stop Loss', type: 'number', min: 0, step: 0.01, default: 0 },
             { key: 'targetPrice', label: 'Target Price', type: 'number', min: 0, step: 0.01, default: 0 },
-            { key: 'riskRewardRatio', label: 'Risk:Reward', type: 'select', options: [1, 1.5, 2, 2.5, 3, 4, 5], default: 2 },
+            { key: 'riskRewardRatio', label: 'Risk:Reward', type: 'select', options: [1, 1.5, 2, 2.5, 3, 4, 5] as any, default: 2 },
             { key: 'showTarget', label: 'Show Target', type: 'boolean', default: true },
             { key: 'showPanel', label: 'Show Info Panel', type: 'boolean', default: true },
         ],
@@ -363,18 +383,18 @@ export const indicatorConfigs = {
 /**
  * Get config for a specific indicator type
  */
-export const getIndicatorConfig = (type) => {
+export const getIndicatorConfig = (type: string): IndicatorConfigDefinition | null => {
     return indicatorConfigs[type] || null;
 };
 
 /**
  * Get default settings for an indicator
  */
-export const getDefaultSettings = (type) => {
+export const getDefaultSettings = (type: string): Record<string, any> => {
     const config = indicatorConfigs[type];
     if (!config) return {};
 
-    const defaults = {};
+    const defaults: Record<string, any> = {};
 
     // Get input defaults
     config.inputs.forEach(field => {

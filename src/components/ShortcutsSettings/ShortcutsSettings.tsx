@@ -11,24 +11,13 @@ import {
     resetAllShortcuts,
     isShortcutCustomized,
     parseKeyboardEvent,
+    ShortcutDefinition,
+    Modifier,
 } from '../../config/shortcuts';
 import { RotateCcw, X, AlertCircle } from 'lucide-react';
 
-interface Shortcut {
-    key: string;
-    modifiers?: {
-        ctrl?: boolean;
-        alt?: boolean;
-        shift?: boolean;
-        meta?: boolean;
-    };
-    category?: string;
-    label?: string;
-}
-
-interface ShortcutWithId extends Shortcut {
+interface ShortcutWithId extends ShortcutDefinition {
     id: string;
-    label: string;
 }
 
 interface ConflictResult {
@@ -48,7 +37,7 @@ export interface ShortcutsSettingsProps {
  * Allows users to view and customize keyboard shortcuts
  */
 const ShortcutsSettings: React.FC<ShortcutsSettingsProps> = ({ onClose, embedded = false }) => {
-    const [shortcuts, setShortcuts] = useState<Record<string, Shortcut>>({});
+    const [shortcuts, setShortcuts] = useState<Record<string, ShortcutDefinition>>({});
     const [editingId, setEditingId] = useState<string | null>(null);
     const [conflict, setConflict] = useState<ConflictResult | null>(null);
     const [expandedCategories, setExpandedCategories] = useState<Set<string>>(new Set(['navigation', 'chart', 'actions']));
@@ -187,7 +176,8 @@ const ShortcutsSettings: React.FC<ShortcutsSettingsProps> = ({ onClose, embedded
 
                         {expandedCategories.has(category) && (
                             <div className={styles.categoryItems}>
-                                {items.map(({ id, label, ...shortcut }) => {
+                                {items.map((item) => {
+                                    const { id, label } = item;
                                     const isEditing = editingId === id;
                                     const isCustomized = isShortcutCustomized(id);
 
@@ -208,7 +198,7 @@ const ShortcutsSettings: React.FC<ShortcutsSettingsProps> = ({ onClose, embedded
                                                     </span>
                                                 ) : (
                                                     <kbd className={styles.kbd}>
-                                                        {formatShortcut(shortcut)}
+                                                        {formatShortcut(item)}
                                                     </kbd>
                                                 )}
                                                 {isCustomized && !isEditing && (

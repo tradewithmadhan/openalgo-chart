@@ -12,17 +12,11 @@
 // Note: In a Web Worker, we need to inline or use importScripts
 // Since we're using Vite module workers, we can use imports
 
-/**
- * TPO Calculation (simplified version for worker)
- * Full implementation is in src/utils/indicators/tpo.js
- */
 // Import all indicators
 import * as indicators from '../utils/indicators';
 
 // Extract specific functions for easier usage
 const {
-    calculateTPO,
-    calculateVolume, // Assuming volume profile logic might be partly there or custom
     calculateRSI,
     calculateMACD,
     calculateBollingerBands,
@@ -34,11 +28,40 @@ const {
     calculateATR
 } = indicators;
 
+interface OHLCData {
+    time: number;
+    open: number;
+    high: number;
+    low: number;
+    close: number;
+    volume?: number;
+}
+
+interface TPOOptions {
+    blockSize?: string | number;
+    tickSize?: string | number;
+    valueAreaPercent?: number;
+    sessionStart?: number;
+    sessionEnd?: number;
+}
+
+interface VolumeProfileOptions {
+    rowCount?: number;
+    valueAreaPercent?: number;
+}
+
+interface WorkerMessage {
+    type: string;
+    id: string;
+    data: OHLCData[];
+    options?: any;
+}
+
 /**
  * TPO Calculation (simplified version for worker)
  * Full implementation is in src/utils/indicators/tpo.js
  */
-const BLOCK_SIZE_MAP = {
+const BLOCK_SIZE_MAP: Record<string, number> = {
     '15m': 15,
     '30m': 30,
     '1h': 60,
@@ -46,12 +69,12 @@ const BLOCK_SIZE_MAP = {
     '4h': 240
 };
 
-const parseBlockSize = (blockSize) => {
+const parseBlockSize = (blockSize: string | number): number => {
     if (typeof blockSize === 'number') return blockSize;
     return BLOCK_SIZE_MAP[blockSize] || 30;
 };
 
-const calculateAutoTickSize = (data) => {
+const calculateAutoTickSize = (data: OHLCData[]): number => {
     if (!data || data.length === 0) return 1;
 
     let minPrice = Infinity;
@@ -65,7 +88,7 @@ const calculateAutoTickSize = (data) => {
     const avgPrice = (minPrice + maxPrice) / 2;
     const range = maxPrice - minPrice;
 
-    let tickSize;
+    let tickSize: number;
     if (avgPrice < 10) tickSize = 0.05;
     else if (avgPrice < 50) tickSize = 0.1;
     else if (avgPrice < 100) tickSize = 0.25;
@@ -83,12 +106,12 @@ const calculateAutoTickSize = (data) => {
     return Math.max(0.01, tickSize);
 };
 
-const quantizePrice = (price, tickSize) => {
+const quantizePrice = (price: number, tickSize: number): number => {
     return Math.round(price / tickSize) * tickSize;
 };
 
-const getPriceLevels = (low, high, tickSize) => {
-    const levels = [];
+const getPriceLevels = (low: number, high: number, tickSize: number): number[] => {
+    const levels: number[] = [];
     const quantizedLow = quantizePrice(low, tickSize);
     const quantizedHigh = quantizePrice(high, tickSize);
 
@@ -101,28 +124,22 @@ const getPriceLevels = (low, high, tickSize) => {
 /**
  * Calculate TPO Profile for given data
  */
-const calculateTPOProfile = (data, options = {}) => {
+const calculateTPOProfile = (data: OHLCData[], options: TPOOptions = {}): any => {
     const {
         blockSize = '30m',
         tickSize = 'auto',
         valueAreaPercent = 70,
-        sessionStart = 9 * 60 + 15, // 9:15 IST
-        sessionEnd = 15 * 60 + 30,  // 15:30 IST
     } = options;
-
-    // Use the imported calculation if possible, or keep the worker-local implementation if it was optimized/different.
-    // The previous implementation was inline. Let's keep the inline one for TPO to avoid breaking changes if the imported logic differs significantly or has dependencies not present here.
-    // Actually, to ensure consistency, we should ideally use the imported one, but for now let's minimally touch working code.
 
     if (!data || data.length === 0) {
         return { sessions: [], error: null };
     }
 
     const periodMinutes = parseBlockSize(blockSize);
-    const calculatedTickSize = tickSize === 'auto' ? calculateAutoTickSize(data) : parseFloat(tickSize);
+    const calculatedTickSize = tickSize === 'auto' ? calculateAutoTickSize(data) : parseFloat(String(tickSize));
 
     // Group data by session (day)
-    const sessionMap = new Map();
+    const sessionMap = new Map<string, OHLCData[]>();
 
     for (const candle of data) {
         const timestamp = candle.time * 1000;
@@ -132,10 +149,10 @@ const calculateTPOProfile = (data, options = {}) => {
         if (!sessionMap.has(dateKey)) {
             sessionMap.set(dateKey, []);
         }
-        sessionMap.get(dateKey).push(candle);
+        sessionMap.get(dateKey)!.push(candle);
     }
 
-    const sessions = [];
+    const sessions: any[] = [];
     const letters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
 
     for (const [dateKey, sessionData] of sessionMap) {
@@ -145,9 +162,9 @@ const calculateTPOProfile = (data, options = {}) => {
         sessionData.sort((a, b) => a.time - b.time);
 
         // Build TPO map: priceLevel -> array of letters
-        const tpoMap = new Map();
+        const tpoMap = new Map<string, string[]>();
         let letterIndex = 0;
-        let prevPeriodStart = null;
+        let prevPeriodStart: number | null = null;
 
         for (const candle of sessionData) {
             const timestamp = candle.time * 1000;
@@ -168,7 +185,7 @@ const calculateTPOProfile = (data, options = {}) => {
                 if (!tpoMap.has(priceKey)) {
                     tpoMap.set(priceKey, []);
                 }
-                const tpos = tpoMap.get(priceKey);
+                const tpos = tpoMap.get(priceKey)!;
                 if (!tpos.includes(letter)) {
                     tpos.push(letter);
                 }
@@ -179,7 +196,7 @@ const calculateTPOProfile = (data, options = {}) => {
         let maxTpoCount = 0;
         let pocPrice = 0;
         let totalTpos = 0;
-        const priceLevelStats = [];
+        const priceLevelStats: Array<{ price: number; count: number; letters: string[] }> = [];
 
         for (const [priceKey, tpos] of tpoMap) {
             const price = parseFloat(priceKey);
@@ -260,7 +277,7 @@ const calculateTPOProfile = (data, options = {}) => {
 /**
  * Calculate Volume Profile
  */
-const calculateVolumeProfile = (data, options = {}) => {
+const calculateVolumeProfile = (data: OHLCData[], options: VolumeProfileOptions = {}): any => {
     const {
         rowCount = 24,
         valueAreaPercent = 70
@@ -360,11 +377,11 @@ const calculateVolumeProfile = (data, options = {}) => {
 /**
  * Message handler
  */
-self.onmessage = (event) => {
+self.onmessage = (event: MessageEvent<WorkerMessage>) => {
     const { type, id, data, options } = event.data;
 
     try {
-        let result;
+        let result: any;
 
         switch (type) {
             case 'tpo':
@@ -418,7 +435,7 @@ self.onmessage = (event) => {
 
         self.postMessage({ id, success: true, result });
 
-    } catch (error) {
+    } catch (error: any) {
         self.postMessage({
             id,
             success: false,

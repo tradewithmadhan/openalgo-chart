@@ -1,7 +1,41 @@
-import { useState, useRef, useEffect, useCallback } from 'react';
+import { useState, useRef, useEffect, useCallback, RefObject } from 'react';
 import { transformData } from '../utils/seriesFactories';
 import { DEFAULT_VIEW_WINDOW, EXTENDED_VIEW_WINDOW } from '../utils/chartConfig';
 import logger from '../../../utils/logger';
+
+export interface UseChartReplayOptions {
+    chartRef: RefObject<any>;
+    mainSeriesRef: RefObject<any>;
+    chartTypeRef: RefObject<string>;
+    dataRef: RefObject<any[]>;
+    priceScaleTimerRef?: RefObject<any>;
+    chartContainerRef?: RefObject<HTMLDivElement>;
+    indicatorsRef?: RefObject<any[]>;
+    updateIndicators?: (data: any[], indicators: any[]) => void;
+    updateAxisLabel?: () => void;
+    onReplayModeChange?: (isReplay: boolean) => void;
+}
+
+export interface UseChartReplayReturn {
+    isReplayMode: boolean;
+    isPlaying: boolean;
+    replaySpeed: number;
+    replayIndex: number | null;
+    isSelectingReplayPoint: boolean;
+    isReplayModeRef: RefObject<boolean>;
+    fullDataRef: RefObject<any[]>;
+    fadedSeriesRef: RefObject<any>;
+    updateReplayDataRef: RefObject<((index: number, hideFeature?: boolean, preserveView?: boolean) => void) | null>;
+    toggleReplay: () => void;
+    setReplaySpeed: React.Dispatch<React.SetStateAction<number>>;
+    handleReplayPlayPause: () => void;
+    handleReplayForward: () => void;
+    handleReplayJumpTo: () => void;
+    handleSliderChange: (index: number, hideFuture?: boolean) => void;
+    closeReplay: () => void;
+    updateReplayData: (index: number, hideFeature?: boolean, preserveView?: boolean) => void;
+    stopReplay: () => void;
+}
 
 /**
  * Custom hook for chart replay mode functionality
@@ -18,24 +52,24 @@ export function useChartReplay({
     updateIndicators,
     updateAxisLabel,
     onReplayModeChange,
-}) {
+}: UseChartReplayOptions): UseChartReplayReturn {
     // Replay State
-    const [isReplayMode, setIsReplayMode] = useState(false);
-    const isReplayModeRef = useRef(false);
+    const [isReplayMode, setIsReplayMode] = useState<boolean>(false);
+    const isReplayModeRef = useRef<boolean>(false);
 
-    const [isPlaying, setIsPlaying] = useState(false);
-    const [replaySpeed, setReplaySpeed] = useState(1);
-    const [replayIndex, setReplayIndex] = useState(null);
-    const [isSelectingReplayPoint, setIsSelectingReplayPoint] = useState(false);
+    const [isPlaying, setIsPlaying] = useState<boolean>(false);
+    const [replaySpeed, setReplaySpeed] = useState<number>(1);
+    const [replayIndex, setReplayIndex] = useState<number | null>(null);
+    const [isSelectingReplayPoint, setIsSelectingReplayPoint] = useState<boolean>(false);
 
-    const fullDataRef = useRef([]); // Store full data for replay
-    const replayIntervalRef = useRef(null);
-    const fadedSeriesRef = useRef(null); // Store faded series for future candles
+    const fullDataRef = useRef<any[]>([]); // Store full data for replay
+    const replayIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+    const fadedSeriesRef = useRef<any>(null); // Store faded series for future candles
 
     // Refs for stable callbacks to prevent race conditions
-    const replayIndexRef = useRef(null);
-    const isPlayingRef = useRef(false);
-    const updateReplayDataRef = useRef(null);
+    const replayIndexRef = useRef<number | null>(null);
+    const isPlayingRef = useRef<boolean>(false);
+    const updateReplayDataRef = useRef<((index: number, hideFeature?: boolean, preserveView?: boolean) => void) | null>(null);
 
     // Keep refs in sync with state
     useEffect(() => { isReplayModeRef.current = isReplayMode; }, [isReplayMode]);
@@ -51,14 +85,14 @@ export function useChartReplay({
     }, []);
 
     // Update replay data to show candles up to the specified index
-    const updateReplayData = useCallback((index, hideFeature = true, preserveView = false) => {
+    const updateReplayData = useCallback((index: number, hideFeature: boolean = true, preserveView: boolean = false) => {
         if (!mainSeriesRef.current || !fullDataRef.current || !chartRef.current) return;
 
         // Clamp index to valid range
         const clampedIndex = Math.max(0, Math.min(index, fullDataRef.current.length - 1));
 
         // Store current visible range if we need to preserve it
-        let currentVisibleRange = null;
+        let currentVisibleRange: any = null;
         if (preserveView && chartRef.current) {
             try {
                 const timeScale = chartRef.current.timeScale();
@@ -73,12 +107,12 @@ export function useChartReplay({
         if (hideFeature) {
             // Hide future candles - show only past data
             dataRef.current = pastData;
-            const transformedData = transformData(pastData, chartTypeRef.current);
+            const transformedData = transformData(pastData, chartTypeRef.current || 'candlestick');
             mainSeriesRef.current.setData(transformedData);
         } else {
             // Show all candles (for preview mode)
             dataRef.current = fullDataRef.current;
-            const transformedData = transformData(fullDataRef.current, chartTypeRef.current);
+            const transformedData = transformData(fullDataRef.current, chartTypeRef.current || 'candlestick');
             mainSeriesRef.current.setData(transformedData);
         }
 
@@ -126,10 +160,10 @@ export function useChartReplay({
             const newMode = !prev;
             if (!prev) {
                 // Entering replay mode
-                fullDataRef.current = [...dataRef.current];
+                fullDataRef.current = [...(dataRef.current || [])];
                 setIsPlaying(false);
                 isPlayingRef.current = false;
-                const startIndex = Math.max(0, dataRef.current.length - 1);
+                const startIndex = Math.max(0, (dataRef.current?.length || 1) - 1);
                 setReplayIndex(startIndex);
                 replayIndexRef.current = startIndex;
                 // Initialize replay data display - show all candles initially
@@ -160,7 +194,7 @@ export function useChartReplay({
                 // Restore full data
                 if (mainSeriesRef.current && fullDataRef.current.length > 0) {
                     dataRef.current = fullDataRef.current;
-                    const transformedData = transformData(fullDataRef.current, chartTypeRef.current);
+                    const transformedData = transformData(fullDataRef.current, chartTypeRef.current || 'candlestick');
                     mainSeriesRef.current.setData(transformedData);
                     if (updateIndicators && indicatorsRef?.current) {
                         updateIndicators(fullDataRef.current, indicatorsRef.current);
@@ -200,7 +234,7 @@ export function useChartReplay({
         // Show ALL candles so user can see the full timeline and select a new point
         if (mainSeriesRef.current && fullDataRef.current && fullDataRef.current.length > 0) {
             // Store current visible range to preserve zoom level
-            let currentVisibleRange = null;
+            let currentVisibleRange: any = null;
             if (chartRef.current) {
                 try {
                     const timeScale = chartRef.current.timeScale();
@@ -215,7 +249,7 @@ export function useChartReplay({
 
             // Show all candles so user can see the full timeline
             dataRef.current = fullDataRef.current;
-            const transformedData = transformData(fullDataRef.current, chartTypeRef.current);
+            const transformedData = transformData(fullDataRef.current, chartTypeRef.current || 'candlestick');
             mainSeriesRef.current.setData(transformedData);
 
             if (updateIndicators && indicatorsRef?.current) {
@@ -265,7 +299,7 @@ export function useChartReplay({
     }, [chartRef, mainSeriesRef, chartTypeRef, dataRef, chartContainerRef, indicatorsRef, updateIndicators]);
 
     // Handle slider change
-    const handleSliderChange = useCallback((index, hideFuture = true) => {
+    const handleSliderChange = useCallback((index: number, hideFuture: boolean = true) => {
         if (index >= 0 && index < fullDataRef.current.length) {
             // Stop playback when user manually changes position
             if (isPlayingRef.current) {
@@ -288,7 +322,7 @@ export function useChartReplay({
         // Restore full data
         if (mainSeriesRef.current && fullDataRef.current.length > 0) {
             dataRef.current = fullDataRef.current;
-            const transformedData = transformData(fullDataRef.current, chartTypeRef.current);
+            const transformedData = transformData(fullDataRef.current, chartTypeRef.current || 'candlestick');
             mainSeriesRef.current.setData(transformedData);
             if (updateIndicators && indicatorsRef?.current) {
                 updateIndicators(fullDataRef.current, indicatorsRef.current);
@@ -333,14 +367,14 @@ export function useChartReplay({
         if (!chartRef.current || !isReplayMode || isSelectingReplayPoint || isPlaying) return;
         if (!mainSeriesRef.current) return;
 
-        const handleReplayClick = (param) => {
+        const handleReplayClick = (param: any) => {
             if (!param) return;
             if (!fullDataRef.current || fullDataRef.current.length === 0) return;
             if (isSelectingReplayPoint) return;
             if (isPlayingRef.current) return;
 
             try {
-                let clickedTime = null;
+                let clickedTime: number | null = null;
 
                 if (param.time) {
                     clickedTime = param.time;
@@ -370,7 +404,7 @@ export function useChartReplay({
                 clickedIndex = Math.max(0, Math.min(clickedIndex, fullDataRef.current.length - 1));
 
                 // Store current visible range BEFORE updating data
-                let currentVisibleRange = null;
+                let currentVisibleRange: any = null;
                 try {
                     const timeScale = chartRef.current.timeScale();
                     currentVisibleRange = timeScale.getVisibleRange();
@@ -421,12 +455,12 @@ export function useChartReplay({
         if (!chartRef.current || !isSelectingReplayPoint) return;
         if (!mainSeriesRef.current) return;
 
-        const handleChartClick = (param) => {
+        const handleChartClick = (param: any) => {
             if (!param || !isSelectingReplayPoint) return;
             if (!fullDataRef.current || fullDataRef.current.length === 0) return;
 
             try {
-                let clickedTime = null;
+                let clickedTime: number | null = null;
 
                 if (param.time) {
                     clickedTime = param.time;
@@ -439,13 +473,13 @@ export function useChartReplay({
                 if (!clickedTime) return;
 
                 // Find exact time match first
-                let clickedIndex = fullDataRef.current.findIndex(d => d.time === clickedTime);
+                let clickedIndex = fullDataRef.current.findIndex((d: any) => d.time === clickedTime);
 
                 // If no exact match, find the closest candle
                 if (clickedIndex === -1) {
                     let minDiff = Infinity;
-                    fullDataRef.current.forEach((d, i) => {
-                        const diff = Math.abs(d.time - clickedTime);
+                    fullDataRef.current.forEach((d: any, i: number) => {
+                        const diff = Math.abs(d.time - (clickedTime as number));
                         if (diff < minDiff) {
                             minDiff = diff;
                             clickedIndex = i;
@@ -459,7 +493,7 @@ export function useChartReplay({
                     const selectedIndex = clickedIndex;
 
                     // Get current visible range BEFORE updating data
-                    let currentVisibleRange = null;
+                    let currentVisibleRange: any = null;
                     try {
                         const timeScale = chartRef.current.timeScale();
                         currentVisibleRange = timeScale.getVisibleRange();
@@ -468,7 +502,7 @@ export function useChartReplay({
                     }
 
                     // Calculate the range width in time units
-                    let rangeWidth = null;
+                    let rangeWidth: number | null = null;
                     if (currentVisibleRange && currentVisibleRange.from && currentVisibleRange.to) {
                         rangeWidth = currentVisibleRange.to - currentVisibleRange.from;
                     }
@@ -478,7 +512,7 @@ export function useChartReplay({
 
                     // Calculate target visible range
                     const selectedTime = fullDataRef.current[selectedIndex]?.time;
-                    let targetRange = null;
+                    let targetRange: { from: number; to: number } | null = null;
 
                     if (selectedTime && rangeWidth && rangeWidth > 0) {
                         const newFrom = selectedTime - rangeWidth / 2;

@@ -21,11 +21,29 @@ import {
 import { calculateANNStrategy } from '../../../utils/indicators/annStrategy';
 import { calculateHilengaMilenga } from '../../../utils/indicators/hilengaMilenga';
 import { CHART_COLORS } from '../../../utils/colorUtils';
+import { IndicatorConfig } from './indicatorCreators';
+
+export interface OHLCData {
+    time: number;
+    open: number;
+    high: number;
+    low: number;
+    close: number;
+    volume?: number;
+}
+
+export interface ChartMarker {
+    time: number;
+    position: 'aboveBar' | 'belowBar';
+    color: string;
+    shape: 'arrowUp' | 'arrowDown' | 'circle' | 'square';
+    text?: string;
+}
 
 /**
  * Update SMA/EMA/VWAP series
  */
-export const updateOverlaySeries = (series, ind, data, isVisible) => {
+export const updateOverlaySeries = (series: any, ind: IndicatorConfig, data: OHLCData[], isVisible: boolean): void => {
     const { type } = ind;
     // Generate title only if showTitle is enabled
     const title = ind.showTitle ? `${type.toUpperCase()} ${ind.period || 20}` : '';
@@ -36,10 +54,10 @@ export const updateOverlaySeries = (series, ind, data, isVisible) => {
         title
     });
 
-    let val = null;
+    let val: any = null;
     if (type === 'sma') val = calculateSMA(data, ind.period || 20);
     else if (type === 'ema') val = calculateEMA(data, ind.period || 20);
-    else if (type === 'vwap') val = calculateVWAP(data, { ...ind });
+    else if (type === 'vwap') val = calculateVWAP(data, ind as any);
 
     if (val && val.length > 0) series.setData(val);
 };
@@ -47,7 +65,7 @@ export const updateOverlaySeries = (series, ind, data, isVisible) => {
 /**
  * Update RSI series
  */
-export const updateRSISeries = (series, ind, data, isVisible) => {
+export const updateRSISeries = (series: any, ind: IndicatorConfig, data: OHLCData[], isVisible: boolean): void => {
     series.applyOptions({ visible: isVisible, color: ind.color || '#7B1FA2' });
     if (series._obLine) {
         series._obLine.applyOptions({ price: ind.overbought || 70, color: ind.overboughtColor || CHART_COLORS.DOWN.primary });
@@ -62,17 +80,17 @@ export const updateRSISeries = (series, ind, data, isVisible) => {
 /**
  * Update MACD series
  */
-export const updateMACDSeries = (series, ind, data, isVisible) => {
+export const updateMACDSeries = (series: any, ind: IndicatorConfig, data: OHLCData[], isVisible: boolean): void => {
     if (series.macd) series.macd.applyOptions({ visible: isVisible, color: ind.macdColor || '#2962FF' });
     if (series.signal) series.signal.applyOptions({ visible: isVisible, color: ind.signalColor || '#FF6D00' });
     if (series.histogram) series.histogram.applyOptions({ visible: isVisible });
 
-    const val = calculateMACD(data, ind.fast || 12, ind.slow || 26, ind.signal || 9);
+    const val = calculateMACD(data, ind.fast || 12, ind.slow || 26, ind.signal || 9) as any;
     if (val) {
         if (val.macd) series.macd.setData(val.macd);
         if (val.signal) series.signal.setData(val.signal);
         if (val.histogram) {
-            const colored = val.histogram.map(d => ({
+            const colored = val.histogram.map((d: any) => ({
                 ...d,
                 color: d.value >= 0 ? (ind.histUpColor || '#26A69A') : (ind.histDownColor || '#EF5350')
             }));
@@ -84,7 +102,7 @@ export const updateMACDSeries = (series, ind, data, isVisible) => {
 /**
  * Update Bollinger Bands series
  */
-export const updateBollingerBandsSeries = (series, ind, data, isVisible) => {
+export const updateBollingerBandsSeries = (series: any, ind: IndicatorConfig, data: OHLCData[], isVisible: boolean): void => {
     series.upper.applyOptions({ visible: isVisible, color: ind.upperColor || '#2962FF' });
     series.middle.applyOptions({ visible: isVisible, color: ind.basisColor || '#FF6D00' });
     series.lower.applyOptions({ visible: isVisible, color: ind.lowerColor || '#2962FF' });
@@ -100,7 +118,7 @@ export const updateBollingerBandsSeries = (series, ind, data, isVisible) => {
 /**
  * Update Stochastic series
  */
-export const updateStochasticSeries = (series, ind, data, isVisible) => {
+export const updateStochasticSeries = (series: any, ind: IndicatorConfig, data: OHLCData[], isVisible: boolean): void => {
     series.k.applyOptions({ visible: isVisible, color: ind.kColor || '#2962FF' });
     series.d.applyOptions({ visible: isVisible, color: ind.dColor || '#FF6D00' });
 
@@ -114,7 +132,7 @@ export const updateStochasticSeries = (series, ind, data, isVisible) => {
 /**
  * Update ATR series
  */
-export const updateATRSeries = (series, ind, data, isVisible) => {
+export const updateATRSeries = (series: any, ind: IndicatorConfig, data: OHLCData[], isVisible: boolean): void => {
     if (series.applyOptions) series.applyOptions({ visible: isVisible, color: ind.color || '#FF9800' });
     const val = calculateATR(data, ind.period || 14);
     if (val) series.setData(val);
@@ -123,11 +141,11 @@ export const updateATRSeries = (series, ind, data, isVisible) => {
 /**
  * Update Supertrend series
  */
-export const updateSupertrendSeries = (series, ind, data, isVisible) => {
+export const updateSupertrendSeries = (series: any, ind: IndicatorConfig, data: OHLCData[], isVisible: boolean): void => {
     series.applyOptions({ visible: isVisible });
     const val = calculateSupertrend(data, ind.period || 10, ind.multiplier || 3);
     if (val) {
-        const colored = val.map(d => ({
+        const colored = val.map((d: any) => ({
             ...d,
             color: d.trend === 1 ? (ind.upColor || CHART_COLORS.UP.primary) : (ind.downColor || CHART_COLORS.DOWN.primary)
         }));
@@ -138,7 +156,7 @@ export const updateSupertrendSeries = (series, ind, data, isVisible) => {
 /**
  * Update Volume series - TradingView style
  */
-export const updateVolumeSeries = (series, ind, data, isVisible) => {
+export const updateVolumeSeries = (series: any, ind: IndicatorConfig, data: OHLCData[], isVisible: boolean): void => {
     if (!series?.bars || !data) return;
 
     // Apply visibility
@@ -158,10 +176,10 @@ export const updateVolumeSeries = (series, ind, data, isVisible) => {
 
 /**
  * Update ANN Strategy series
- * @returns {Array} markers for signals
+ * @returns markers for signals
  */
-export const updateANNStrategySeries = (series, ind, data, isVisible) => {
-    const markers = [];
+export const updateANNStrategySeries = (series: any, ind: IndicatorConfig, data: OHLCData[], isVisible: boolean): ChartMarker[] => {
+    const markers: ChartMarker[] = [];
 
     if (series.prediction) {
         series.prediction.applyOptions({
@@ -208,13 +226,13 @@ export const updateANNStrategySeries = (series, ind, data, isVisible) => {
             const bgBottom = priceMin - padding;
 
             // Create data for LONG background
-            const longBgData = result.signals.map(sig => ({
+            const longBgData = result.signals.map((sig: any) => ({
                 time: sig.time,
                 value: sig.buying === true ? bgTop : bgBottom
             }));
 
             // Create data for SHORT background
-            const shortBgData = result.signals.map(sig => ({
+            const shortBgData = result.signals.map((sig: any) => ({
                 time: sig.time,
                 value: sig.buying === false ? bgTop : bgBottom
             }));
@@ -238,7 +256,7 @@ export const updateANNStrategySeries = (series, ind, data, isVisible) => {
 /**
  * Update Hilenga-Milenga series
  */
-export const updateHilengaMilengaSeries = (series, ind, data, isVisible) => {
+export const updateHilengaMilengaSeries = (series: any, ind: IndicatorConfig, data: OHLCData[], isVisible: boolean): void => {
     if (series.rsi) series.rsi.applyOptions({ visible: isVisible, color: ind.rsiColor || '#131722' });
     if (series.ema) series.ema.applyOptions({ visible: isVisible, color: ind.emaColor || '#26A69A' });
     if (series.wma) series.wma.applyOptions({ visible: isVisible, color: ind.wmaColor || '#EF5350' });
@@ -248,7 +266,7 @@ export const updateHilengaMilengaSeries = (series, ind, data, isVisible) => {
         rsiLength: ind.rsiLength || 14,
         emaLength: ind.emaLength || 5,
         wmaLength: ind.wmaLength || 45
-    });
+    } as any) as any;
 
     if (result) {
         if (result.rsi && series.rsi) series.rsi.setData(result.rsi);
@@ -261,7 +279,7 @@ export const updateHilengaMilengaSeries = (series, ind, data, isVisible) => {
 /**
  * Update ADX series
  */
-export const updateADXSeries = (series, ind, data, isVisible) => {
+export const updateADXSeries = (series: any, ind: IndicatorConfig, data: OHLCData[], isVisible: boolean): void => {
     if (series.adx) series.adx.applyOptions({ visible: isVisible, color: ind.adxColor || '#FF9800', lineWidth: ind.lineWidth || 2 });
     if (series.plusDI) series.plusDI.applyOptions({ visible: isVisible, color: ind.plusDIColor || '#26A69A' });
     if (series.minusDI) series.minusDI.applyOptions({ visible: isVisible, color: ind.minusDIColor || '#EF5350' });
@@ -277,7 +295,7 @@ export const updateADXSeries = (series, ind, data, isVisible) => {
 /**
  * Update Ichimoku series
  */
-export const updateIchimokuSeries = (series, ind, data, isVisible) => {
+export const updateIchimokuSeries = (series: any, ind: IndicatorConfig, data: OHLCData[], isVisible: boolean): void => {
     if (series.tenkan) series.tenkan.applyOptions({ visible: isVisible, color: ind.tenkanColor || '#2962FF' });
     if (series.kijun) series.kijun.applyOptions({ visible: isVisible, color: ind.kijunColor || '#EF5350' });
     if (series.senkouA) series.senkouA.applyOptions({ visible: isVisible, color: ind.senkouAColor || '#26A69A' });
@@ -304,7 +322,7 @@ export const updateIchimokuSeries = (series, ind, data, isVisible) => {
 /**
  * Update Pivot Points series
  */
-export const updatePivotPointsSeries = (series, ind, data, isVisible) => {
+export const updatePivotPointsSeries = (series: any, ind: IndicatorConfig, data: OHLCData[], isVisible: boolean): void => {
     const lineWidth = ind.lineWidth || 1;
 
     if (series.pivot) series.pivot.applyOptions({ visible: isVisible, color: ind.pivotColor || '#FF9800', lineWidth, title: ind.showTitle !== false ? 'P' : '' });
@@ -329,13 +347,9 @@ export const updatePivotPointsSeries = (series, ind, data, isVisible) => {
 
 /**
  * Main update function - updates series for any indicator type
- * @param {Object} series - The indicator series
- * @param {Object} ind - Indicator configuration
- * @param {Array} data - OHLC data
- * @param {boolean} isVisible - Whether the indicator is visible
- * @returns {Array} markers (for indicators that generate markers like ANN Strategy)
+ * @returns markers (for indicators that generate markers like ANN Strategy)
  */
-export const updateIndicatorSeries = (series, ind, data, isVisible) => {
+export const updateIndicatorSeries = (series: any, ind: IndicatorConfig, data: OHLCData[], isVisible: boolean): ChartMarker[] => {
     const { type } = ind;
 
     switch (type) {

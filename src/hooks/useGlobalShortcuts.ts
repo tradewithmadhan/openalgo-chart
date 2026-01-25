@@ -4,17 +4,7 @@
  */
 
 import { useEffect, useCallback, useRef } from 'react';
-import { SHORTCUTS, matchesShortcut, isInputField } from '../config/shortcuts';
-
-// ==================== TYPES ====================
-
-/** Shortcut definition from config */
-interface ShortcutDefinition {
-  key: string;
-  modifiers?: string[] | undefined;
-  action: string;
-  payload?: unknown;
-}
+import { SHORTCUTS, matchesShortcut, isInputField, ShortcutDefinition } from '../config/shortcuts';
 
 /** Handler function types */
 export type ShortcutHandler = (payload?: unknown) => void;

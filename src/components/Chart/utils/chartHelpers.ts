@@ -3,10 +3,27 @@
  * Pure utility functions for chart operations
  */
 
+export interface ThemeColors {
+  background: string;
+  text: string;
+  grid: string;
+  border: string;
+  crosshair: string;
+}
+
+export interface OHLCCandle {
+  time: number;
+  open?: number;
+  high?: number;
+  low?: number;
+  close?: number;
+  volume?: number;
+}
+
 /**
  * Drawing tool name mapping from UI tool names to LineToolManager tool names
  */
-export const TOOL_MAP = {
+export const TOOL_MAP: Record<string, string> = {
   'cursor': 'None',
   'eraser': 'Eraser',
   'trendline': 'TrendLine',
@@ -50,11 +67,8 @@ export const TOOL_MAP = {
 
 /**
  * Convert hex color to rgba
- * @param {string} hex - Hex color string (e.g., '#FF0000')
- * @param {number} alpha - Alpha value (0-1)
- * @returns {string} RGBA color string
  */
-export const hexToRgba = (hex, alpha) => {
+export const hexToRgba = (hex: string, alpha: number): string => {
   if (!hex || hex.length < 7) return `rgba(0, 0, 0, ${alpha})`;
   const r = parseInt(hex.slice(1, 3), 16);
   const g = parseInt(hex.slice(3, 5), 16);
@@ -64,14 +78,11 @@ export const hexToRgba = (hex, alpha) => {
 
 /**
  * Normalize symbols for comparison (handles exchange suffixes)
- * @param {string} s1 - First symbol
- * @param {string} s2 - Second symbol
- * @returns {boolean} True if symbols are equivalent
  */
-export const areSymbolsEquivalent = (s1, s2) => {
+export const areSymbolsEquivalent = (s1: string, s2: string): boolean => {
   // Validate inputs are non-empty strings
   if (!s1 || !s2 || typeof s1 !== 'string' || typeof s2 !== 'string') return false;
-  const normalize = (s) => {
+  const normalize = (s: string): string => {
     const parts = s.split(':');
     return parts.length > 0 ? parts[0].trim().toUpperCase() : '';
   };
@@ -80,10 +91,8 @@ export const areSymbolsEquivalent = (s1, s2) => {
 
 /**
  * Convert interval string to seconds
- * @param {string} interval - Interval string (e.g., '5m', '1h', '1d')
- * @returns {number} Interval in seconds
  */
-export const intervalToSeconds = (interval) => {
+export const intervalToSeconds = (interval: string): number => {
   if (!interval) return 300; // Default 5 minutes
 
   const value = parseInt(interval);
@@ -101,11 +110,8 @@ export const intervalToSeconds = (interval) => {
 
 /**
  * Format price based on instrument type
- * @param {number} price - Price value
- * @param {string} symbol - Symbol name
- * @returns {string} Formatted price string
  */
-export const formatPrice = (price, symbol = '') => {
+export const formatPrice = (price: number | null | undefined, symbol: string = ''): string => {
   if (price === null || price === undefined) return '-';
 
   // Crypto typically needs more decimals
@@ -117,10 +123,8 @@ export const formatPrice = (price, symbol = '') => {
 
 /**
  * Get chart theme colors based on theme name
- * @param {string} theme - Theme name ('light' or 'dark')
- * @returns {Object} Theme colors object
  */
-export const getThemeColors = (theme) => {
+export const getThemeColors = (theme: string): ThemeColors => {
   const isDark = theme === 'dark';
 
   return {
@@ -134,24 +138,20 @@ export const getThemeColors = (theme) => {
 
 /**
  * Clamp a value between min and max
- * @param {number} value - Value to clamp
- * @param {number} min - Minimum value
- * @param {number} max - Maximum value
- * @returns {number} Clamped value
  */
-export const clamp = (value, min, max) => {
+export const clamp = (value: number, min: number, max: number): number => {
   return Math.max(min, Math.min(max, value));
 };
 
 /**
  * Debounce function execution
- * @param {Function} func - Function to debounce
- * @param {number} wait - Wait time in milliseconds
- * @returns {Function} Debounced function
  */
-export const debounce = (func, wait) => {
-  let timeout;
-  return function executedFunction(...args) {
+export const debounce = <T extends (...args: any[]) => any>(
+  func: T,
+  wait: number
+): ((...args: Parameters<T>) => void) => {
+  let timeout: ReturnType<typeof setTimeout> | undefined;
+  return function executedFunction(...args: Parameters<T>) {
     const later = () => {
       clearTimeout(timeout);
       func(...args);
@@ -163,10 +163,8 @@ export const debounce = (func, wait) => {
 
 /**
  * Format time difference in human-readable format
- * @param {number} ms - Time difference in milliseconds
- * @returns {string} Formatted time string (e.g., "2d 5h", "3h 45m", "10m", "30s")
  */
-export const formatTimeDiff = (ms) => {
+export const formatTimeDiff = (ms: number): string => {
   const seconds = Math.floor(ms / 1000);
   const minutes = Math.floor(seconds / 60);
   const hours = Math.floor(minutes / 60);
@@ -182,19 +180,19 @@ export const formatTimeDiff = (ms) => {
  * Add future whitespace points for time axis display
  * Whitespace points are data objects with only 'time' property (no price data)
  * This allows lightweight-charts to render future time labels on the axis
- * @param {Array} data - OHLC candle data
- * @param {number} intervalSeconds - Interval in seconds
- * @param {number} futureCandles - Number of future candles to add (default 120)
- * @returns {Array} Data with whitespace points appended
  */
-export const addFutureWhitespacePoints = (data, intervalSeconds, futureCandles = 120) => {
+export const addFutureWhitespacePoints = <T extends { time: number }>(
+  data: T[],
+  intervalSeconds: number,
+  futureCandles: number = 120
+): Array<T | { time: number }> => {
   if (!data || data.length === 0 || !Number.isFinite(intervalSeconds) || intervalSeconds <= 0) {
     return data;
   }
 
   const lastCandle = data[data.length - 1];
   const lastTime = lastCandle.time;
-  const whitespacePoints = [];
+  const whitespacePoints: Array<{ time: number }> = [];
 
   for (let i = 1; i <= futureCandles; i++) {
     whitespacePoints.push({

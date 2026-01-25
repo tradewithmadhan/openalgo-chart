@@ -3,14 +3,25 @@
  * Utilities for symbol icons, labels, and badges
  */
 
+export interface SymbolIcon {
+    text: string;
+    color: string | null;
+    bgColor: string;
+    isFlag?: boolean;
+}
+
+export interface SearchSymbol {
+    symbol: string;
+    name?: string;
+    exchange?: string;
+    instrumenttype?: string;
+    [key: string]: any;
+}
+
 /**
  * Get symbol icon based on symbol name and type
- * @param {string} symbol - Symbol name
- * @param {string} exchange - Exchange code
- * @param {string} instrumenttype - Instrument type
- * @returns {Object} Icon configuration { text, color, bgColor, isFlag }
  */
-export const getSymbolIcon = (symbol, exchange, instrumenttype) => {
+export const getSymbolIcon = (symbol: string, exchange?: string, instrumenttype?: string): SymbolIcon => {
     const sym = (symbol || '').toUpperCase();
 
     // Nifty 50
@@ -39,12 +50,8 @@ export const getSymbolIcon = (symbol, exchange, instrumenttype) => {
 
 /**
  * Get instrument type label for display
- * @param {string} exchange - Exchange code
- * @param {string} instrumenttype - Instrument type
- * @param {string} symbol - Symbol name
- * @returns {string|null} Type label
  */
-export const getInstrumentTypeLabel = (exchange, instrumenttype, symbol) => {
+export const getInstrumentTypeLabel = (exchange?: string, instrumenttype?: string, symbol?: string): string | null => {
     if (exchange === 'NSE_INDEX' || exchange === 'BSE_INDEX' || (symbol || '').includes('INDEX') || (symbol || '').includes('Index')) {
         return 'index';
     }
@@ -62,10 +69,8 @@ export const getInstrumentTypeLabel = (exchange, instrumenttype, symbol) => {
 
 /**
  * Get exchange badge text
- * @param {string} exchange - Exchange code
- * @returns {string} Badge text
  */
-export const getExchangeBadge = (exchange) => {
+export const getExchangeBadge = (exchange?: string): string => {
     const exch = (exchange || '').toUpperCase();
 
     // BSE exchanges
@@ -85,11 +90,8 @@ export const getExchangeBadge = (exchange) => {
 
 /**
  * Check if symbol matches filter criteria
- * @param {Object} symbol - Symbol object
- * @param {string} filterLabel - Filter tab label
- * @returns {boolean} Whether symbol matches filter
  */
-export const matchesFilter = (symbol, filterLabel) => {
+export const matchesFilter = (symbol: SearchSymbol, filterLabel: string): boolean => {
     const instType = symbol.instrumenttype?.toUpperCase() || '';
     const exch = symbol.exchange?.toUpperCase() || '';
 
@@ -110,11 +112,8 @@ export const matchesFilter = (symbol, filterLabel) => {
 
 /**
  * Sort search results by relevance
- * @param {Array} results - Search results
- * @param {string} query - Search query
- * @returns {Array} Sorted results
  */
-export const sortByRelevance = (results, query) => {
+export const sortByRelevance = (results: SearchSymbol[], query: string): SearchSymbol[] => {
     const upperQuery = query.toUpperCase().replace(/\s+/g, '');
 
     return [...results].sort((a, b) => {

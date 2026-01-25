@@ -8,15 +8,38 @@
  * metadata-driven approach that ensures complete resource cleanup.
  */
 
-import { getIndicatorMetadata, INDICATOR_CLEANUP_TYPES } from './indicatorMetadata';
+import { getIndicatorMetadata, INDICATOR_CLEANUP_TYPES, IndicatorMetadata } from './indicatorMetadata';
 import logger from '../../../utils/logger';
+
+export interface CleanupContext {
+  chart: any;
+  mainSeries: any;
+  indicatorSeriesMap: Map<string, any>;
+  indicatorPanesMap: Map<string, any>;
+  refs: Record<string, any>;
+}
+
+export interface CleanupResults {
+  total: number;
+  successful: number;
+  failed: number;
+  errors: Array<{ id: string; type: string | undefined }>;
+}
+
+export interface VerificationResult {
+  remainingSeriesInMap: number;
+  remainingPanesInMap: number;
+  chartSeriesCount: number;
+  chartPaneCount: number;
+  expectedSeriesCount: number;
+  expectedPaneCount: number;
+  isClean: boolean;
+}
 
 /**
  * Validate if an object is a valid LightweightCharts series
- * @param {*} obj - Object to validate
- * @returns {boolean} True if valid series
  */
-export function isValidSeries(obj) {
+export function isValidSeries(obj: any): boolean {
   if (!obj || typeof obj !== 'object') {
     return false;
   }
@@ -32,10 +55,8 @@ export function isValidSeries(obj) {
 
 /**
  * Validate if an object is a valid chart pane
- * @param {*} pane - Pane object to validate
- * @returns {boolean} True if valid pane
  */
-export function isValidPane(pane) {
+export function isValidPane(pane: any): boolean {
   if (!pane || typeof pane !== 'object') {
     return false;
   }
@@ -46,10 +67,8 @@ export function isValidPane(pane) {
 
 /**
  * Safely remove price lines from a series
- * @param {Object} series - The series object
- * @param {Array<string>} priceLineKeys - Array of property keys containing price lines
  */
-export function cleanupPriceLines(series, priceLineKeys) {
+export function cleanupPriceLines(series: any, priceLineKeys: string[]): void {
   if (!series || !Array.isArray(priceLineKeys)) {
     return;
   }
@@ -73,11 +92,8 @@ export function cleanupPriceLines(series, priceLineKeys) {
 
 /**
  * Safely remove a single series from the chart
- * @param {Object} series - The series to remove
- * @param {Object} chart - The chart instance
- * @param {Object} pane - The pane containing the series (optional)
  */
-export function removeSingleSeries(series, chart, pane) {
+export function removeSingleSeries(series: any, chart: any, pane: any): void {
   logger.debug('[CLEANUP EXEC] removeSingleSeries called', { series, hasChart: !!chart, hasPane: !!pane });
 
   if (!isValidSeries(series)) {
@@ -104,12 +120,8 @@ export function removeSingleSeries(series, chart, pane) {
 
 /**
  * Remove multiple series from a multi-series object
- * @param {Object} seriesObj - Object containing multiple series (e.g., { macdLine, signalLine, histogram })
- * @param {Object} chart - The chart instance
- * @param {Object} pane - The pane containing the series
- * @param {Object} metadata - Indicator metadata with seriesKeys
  */
-export function removeMultiSeries(seriesObj, chart, pane, metadata) {
+export function removeMultiSeries(seriesObj: any, chart: any, pane: any, metadata: IndicatorMetadata): void {
   logger.debug('[CLEANUP EXEC] removeMultiSeries called', {
     hasSeriesObj: !!seriesObj,
     seriesObjType: typeof seriesObj,
@@ -147,10 +159,8 @@ export function removeMultiSeries(seriesObj, chart, pane, metadata) {
 
 /**
  * Remove an array of series
- * @param {Array|Object} arrayOrRef - Array of series or ref object containing array
- * @param {Object} chart - The chart instance
  */
-export function removeSeriesArray(arrayOrRef, chart) {
+export function removeSeriesArray(arrayOrRef: any, chart: any): void {
   logger.debug('[CLEANUP EXEC] removeSeriesArray called', {
     hasArrayOrRef: !!arrayOrRef,
     hasCurrent: !!arrayOrRef?.current,
@@ -168,7 +178,7 @@ export function removeSeriesArray(arrayOrRef, chart) {
   }
 
   logger.debug('[CLEANUP EXEC] Processing', array.length, 'series in array');
-  array.forEach((series, index) => {
+  array.forEach((series: any, index: number) => {
     logger.debug(`[CLEANUP EXEC] Array item ${index}:`, { hasSeries: !!series, isValid: isValidSeries(series) });
     if (isValidSeries(series)) {
       removeSingleSeries(series, chart, null);
@@ -189,10 +199,8 @@ export function removeSeriesArray(arrayOrRef, chart) {
 
 /**
  * Detach and remove a primitive from the main series
- * @param {Object} primitiveRef - Ref containing the primitive
- * @param {Object} mainSeries - The main series to detach from
  */
-export function removePrimitive(primitiveRef, mainSeries) {
+export function removePrimitive(primitiveRef: any, mainSeries: any): void {
   const primitive = primitiveRef?.current || primitiveRef;
 
   if (!primitive) {
@@ -216,10 +224,8 @@ export function removePrimitive(primitiveRef, mainSeries) {
 /**
  * Safely remove a pane from the chart
  * Uses pane object reference instead of fragile index-based removal
- * @param {Object} chart - The chart instance
- * @param {Object} pane - The pane object to remove
  */
-export function removePane(chart, pane) {
+export function removePane(chart: any, pane: any): void {
   logger.debug('[CLEANUP EXEC] removePane called', { hasChart: !!chart, hasPane: !!pane });
 
   if (!chart || !pane) {
@@ -255,12 +261,8 @@ export function removePane(chart, pane) {
 
 /**
  * Main cleanup function for a single indicator
- * @param {string} indicatorId - Unique identifier of the indicator
- * @param {string} indicatorType - Type of indicator (e.g., 'sma', 'rsi')
- * @param {Object} context - Cleanup context containing chart, refs, and maps
- * @returns {boolean} True if cleanup was successful
  */
-export function cleanupIndicator(indicatorId, indicatorType, context) {
+export function cleanupIndicator(indicatorId: string, indicatorType: string, context: CleanupContext): boolean {
   logger.debug(`[CLEANUP] Starting cleanup for ${indicatorType} (ID: ${indicatorId})`);
 
   if (!indicatorType) {
@@ -272,7 +274,6 @@ export function cleanupIndicator(indicatorId, indicatorType, context) {
 
   if (!metadata) {
     logger.error(`[CLEANUP] CRITICAL: No metadata found for indicator type: ${indicatorType}`);
-    logger.error(`[CLEANUP] Available types:`, Object.keys(indicatorMetadata));
     return false;
   }
 
@@ -381,13 +382,13 @@ export function cleanupIndicator(indicatorId, indicatorType, context) {
 
 /**
  * Cleanup multiple indicators
- * @param {Array<string>} indicatorIds - Array of indicator IDs to remove
- * @param {Map<string, string>} indicatorTypesMap - Map of indicator ID to type
- * @param {Object} context - Cleanup context
- * @returns {Object} Summary of cleanup results
  */
-export function cleanupIndicators(indicatorIds, indicatorTypesMap, context) {
-  const results = {
+export function cleanupIndicators(
+  indicatorIds: string[],
+  indicatorTypesMap: Map<string, string>,
+  context: CleanupContext
+): CleanupResults {
+  const results: CleanupResults = {
     total: indicatorIds.length,
     successful: 0,
     failed: 0,
@@ -396,7 +397,7 @@ export function cleanupIndicators(indicatorIds, indicatorTypesMap, context) {
 
   indicatorIds.forEach(id => {
     const type = indicatorTypesMap.get(id);
-    const success = cleanupIndicator(id, type, context);
+    const success = cleanupIndicator(id, type || '', context);
 
     if (success) {
       results.successful++;
@@ -418,9 +419,8 @@ export function cleanupIndicators(indicatorIds, indicatorTypesMap, context) {
 /**
  * Emergency cleanup - removes all indicators
  * Use with caution, primarily for testing or recovery scenarios
- * @param {Object} context - Cleanup context
  */
-export function cleanupAllIndicators(context) {
+export function cleanupAllIndicators(context: CleanupContext & { indicatorTypesMap: Map<string, string> }): CleanupResults {
   const { indicatorSeriesMap, indicatorTypesMap } = context;
 
   const allIds = Array.from(indicatorSeriesMap.keys());
@@ -430,18 +430,20 @@ export function cleanupAllIndicators(context) {
 /**
  * Verify cleanup completeness
  * Useful for testing and debugging
- * @param {Object} context - Cleanup context
- * @returns {Object} Verification results
  */
-export function verifyCleanup(context) {
+export function verifyCleanup(context: CleanupContext): VerificationResult {
   const { chart, indicatorSeriesMap, indicatorPanesMap } = context;
 
-  let chartSeries = [];
-  let chartPanes = [];
+  let chartSeries: any[] = [];
+  let chartPanes: any[] = [];
+  let chartSeriesCount = 0;
+  let chartPaneCount = 0;
 
   try {
     chartSeries = chart.series?.() || [];
     chartPanes = chart.panes?.() || [];
+    chartSeriesCount = chartSeries.length;
+    chartPaneCount = chartPanes.length;
   } catch (error) {
     logger.warn('Error getting chart info:', error);
   }
@@ -449,8 +451,8 @@ export function verifyCleanup(context) {
   return {
     remainingSeriesInMap: indicatorSeriesMap.size,
     remainingPanesInMap: indicatorPanesMap.size,
-    chartSeriesCount: chartSeries.length,
-    chartPaneCount: chartPanes.length,
+    chartSeriesCount,
+    chartPaneCount,
     expectedSeriesCount: 1, // Should only have main series
     expectedPaneCount: 1,   // Should only have main pane
     isClean:

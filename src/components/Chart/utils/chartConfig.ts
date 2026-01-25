@@ -23,7 +23,7 @@ export const DEFAULT_PANE_HEIGHT = 100;         // Default height for indicator 
 export const LARGE_PANE_HEIGHT = 120;           // Height for larger indicator panes (MACD, TPO)
 
 // === Animation Settings ===
-export const REPLAY_SPEEDS = [0.5, 1, 2, 4, 8]; // Available replay speeds
+export const REPLAY_SPEEDS: number[] = [0.5, 1, 2, 4, 8]; // Available replay speeds
 
 // === Chart Appearance Defaults ===
 export const DEFAULT_CANDLE_UP_COLOR = CHART_COLORS.UP.primary;

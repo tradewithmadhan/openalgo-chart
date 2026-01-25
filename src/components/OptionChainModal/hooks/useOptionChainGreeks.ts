@@ -1,29 +1,73 @@
+/**
+ * useOptionChainGreeks Hook
+ * Custom hook for fetching and managing option Greeks data
+ * Handles batch API calls, retries, and caching
+ */
 import { useState, useCallback, useEffect, useRef } from 'react';
 import { getMultiOptionGreeks } from '../../../services/openalgo';
 import logger from '../../../utils/logger';
 
-/**
- * Custom hook for fetching and managing option Greeks data
- * Handles batch API calls, retries, and caching
- */
+export interface GreeksResult {
+    iv?: number;
+    greeks?: {
+        delta?: number;
+        gamma?: number;
+        theta?: number;
+        vega?: number;
+        [key: string]: number | undefined;
+    };
+}
+
+export interface OptionChainRow {
+    ce?: { symbol: string; [key: string]: any };
+    pe?: { symbol: string; [key: string]: any };
+    [key: string]: any;
+}
+
+export interface OptionChain {
+    chain?: OptionChainRow[];
+    [key: string]: any;
+}
+
+export interface Underlying {
+    exchange: string;
+    [key: string]: any;
+}
+
+export interface UseOptionChainGreeksParams {
+    isOpen: boolean;
+    optionChain?: OptionChain | null;
+    underlying?: Underlying | null;
+    viewMode: string;
+    selectedExpiry?: string;
+}
+
+export interface UseOptionChainGreeksReturn {
+    greeksData: Map<string, GreeksResult>;
+    greeksLoading: boolean;
+    fetchGreeks: () => Promise<void>;
+    retryFailedGreeks: () => Promise<void>;
+}
+
+const MAX_GREEKS_RETRY_COUNT = 3;
+
 export function useOptionChainGreeks({
     isOpen,
     optionChain,
     underlying,
     viewMode,
     selectedExpiry,
-}) {
-    const [greeksData, setGreeksData] = useState(new Map());
-    const [greeksLoading, setGreeksLoading] = useState(false);
+}: UseOptionChainGreeksParams): UseOptionChainGreeksReturn {
+    const [greeksData, setGreeksData] = useState<Map<string, GreeksResult>>(new Map());
+    const [greeksLoading, setGreeksLoading] = useState<boolean>(false);
 
     // Request tracking refs
-    const greeksRequestIdRef = useRef(0);
-    const failedGreeksSymbolsRef = useRef(new Set());
-    const greeksRetryCountRef = useRef(new Map());
-    const MAX_GREEKS_RETRY_COUNT = 3;
+    const greeksRequestIdRef = useRef<number>(0);
+    const failedGreeksSymbolsRef = useRef<Set<string>>(new Set());
+    const greeksRetryCountRef = useRef<Map<string, number>>(new Map());
 
     // Helper to increment retry count and check if should block
-    const markSymbolFailed = useCallback((symbol) => {
+    const markSymbolFailed = useCallback((symbol: string): void => {
         const currentCount = greeksRetryCountRef.current.get(symbol) || 0;
         const newCount = currentCount + 1;
         greeksRetryCountRef.current.set(symbol, newCount);
@@ -37,19 +81,19 @@ export function useOptionChainGreeks({
     }, []);
 
     // Batch fetch Greeks
-    const fetchGreeks = useCallback(async () => {
+    const fetchGreeks = useCallback(async (): Promise<void> => {
         if (!optionChain?.chain?.length) return;
 
         const requestId = ++greeksRequestIdRef.current;
 
         // Collect symbols to fetch
-        const symbolsToFetch = [];
+        const symbolsToFetch: Array<{ symbol: string; exchange: string }> = [];
         optionChain.chain.forEach(row => {
             if (row.ce?.symbol && !greeksData.has(row.ce.symbol) && !failedGreeksSymbolsRef.current.has(row.ce.symbol)) {
-                symbolsToFetch.push({ symbol: row.ce.symbol, exchange: underlying.exchange });
+                symbolsToFetch.push({ symbol: row.ce.symbol, exchange: underlying?.exchange || 'NSE' });
             }
             if (row.pe?.symbol && !greeksData.has(row.pe.symbol) && !failedGreeksSymbolsRef.current.has(row.pe.symbol)) {
-                symbolsToFetch.push({ symbol: row.pe.symbol, exchange: underlying.exchange });
+                symbolsToFetch.push({ symbol: row.pe.symbol, exchange: underlying?.exchange || 'NSE' });
             }
         });
 
@@ -68,9 +112,9 @@ export function useOptionChainGreeks({
 
             if (response?.data?.length > 0) {
                 const newGreeksData = new Map(greeksData);
-                const symbolsInResponse = new Set();
+                const symbolsInResponse = new Set<string>();
 
-                response.data.forEach(item => {
+                response.data.forEach((item: any) => {
                     if (item.status === 'success' && item.symbol) {
                         newGreeksData.set(item.symbol, {
                             iv: item.implied_volatility,
@@ -107,16 +151,16 @@ export function useOptionChainGreeks({
     }, [optionChain?.chain, underlying?.exchange, greeksData, markSymbolFailed]);
 
     // Retry failed Greeks
-    const retryFailedGreeks = useCallback(async () => {
+    const retryFailedGreeks = useCallback(async (): Promise<void> => {
         if (!optionChain?.chain?.length) return;
 
-        const missingSymbols = [];
+        const missingSymbols: Array<{ symbol: string; exchange: string }> = [];
         optionChain.chain.forEach(row => {
             if (row.ce?.symbol && !greeksData.has(row.ce.symbol) && !failedGreeksSymbolsRef.current.has(row.ce.symbol)) {
-                missingSymbols.push({ symbol: row.ce.symbol, exchange: underlying.exchange });
+                missingSymbols.push({ symbol: row.ce.symbol, exchange: underlying?.exchange || 'NSE' });
             }
             if (row.pe?.symbol && !greeksData.has(row.pe.symbol) && !failedGreeksSymbolsRef.current.has(row.pe.symbol)) {
-                missingSymbols.push({ symbol: row.pe.symbol, exchange: underlying.exchange });
+                missingSymbols.push({ symbol: row.pe.symbol, exchange: underlying?.exchange || 'NSE' });
             }
         });
 
@@ -135,9 +179,9 @@ export function useOptionChainGreeks({
 
             if (response?.data?.length > 0) {
                 const newGreeksData = new Map(greeksData);
-                const symbolsInResponse = new Set();
+                const symbolsInResponse = new Set<string>();
 
-                response.data.forEach(item => {
+                response.data.forEach((item: any) => {
                     if (item.status === 'success' && item.symbol) {
                         newGreeksData.set(item.symbol, {
                             iv: item.implied_volatility,
@@ -173,7 +217,7 @@ export function useOptionChainGreeks({
 
     // Trigger Greeks fetch when switching to greeks view
     useEffect(() => {
-        if (isOpen && viewMode === 'greeks' && optionChain?.chain?.length > 0) {
+        if (isOpen && viewMode === 'greeks' && optionChain?.chain?.length && optionChain.chain.length > 0) {
             fetchGreeks();
         }
     }, [isOpen, viewMode, optionChain?.chain, fetchGreeks]);

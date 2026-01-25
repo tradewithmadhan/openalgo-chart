@@ -1,6 +1,59 @@
-import { useState, useRef, useEffect, useCallback } from 'react';
+import { useState, useRef, useEffect, useCallback, RefObject } from 'react';
 import { formatTimeDiff, TOOL_MAP } from '../utils/chartHelpers';
 import logger from '../../../utils/logger';
+
+export interface ContextMenu {
+    show: boolean;
+    x: number;
+    y: number;
+}
+
+export interface PriceScaleMenu {
+    visible: boolean;
+    x: number;
+    y: number;
+    price: number | null;
+}
+
+export interface MeasureData {
+    isFirstPoint?: boolean;
+    x?: number;
+    y?: number;
+    priceChange?: number;
+    percentChange?: number;
+    barCount?: number;
+    timeElapsed?: string;
+    position?: { x: number; y: number };
+    line?: { x1: number; y1: number; x2: number; y2: number };
+}
+
+export interface UseChartInteractionOptions {
+    chartRef: RefObject<any>;
+    mainSeriesRef: RefObject<any>;
+    chartContainerRef?: RefObject<HTMLDivElement>;
+    lineToolManagerRef?: RefObject<any>;
+    activeTool: string | null;
+    onToolUsed?: () => void;
+    isDrawingsLocked?: boolean;
+    isDrawingsHidden?: boolean;
+    isTimerVisible?: boolean;
+    priceScaleTimerRef?: RefObject<any>;
+    isSessionBreakVisible?: boolean;
+    exchangeRef?: RefObject<string>;
+    dataRef?: RefObject<any[]>;
+}
+
+export interface UseChartInteractionReturn {
+    contextMenu: ContextMenu;
+    setContextMenu: React.Dispatch<React.SetStateAction<ContextMenu>>;
+    priceScaleMenu: PriceScaleMenu;
+    setPriceScaleMenu: React.Dispatch<React.SetStateAction<PriceScaleMenu>>;
+    measureData: MeasureData | null;
+    activeToolRef: RefObject<string | null>;
+    isShiftPressedRef: RefObject<boolean>;
+    measureStartPointRef: RefObject<any>;
+    zoomChart: (zoomIn?: boolean) => void;
+}
 
 /**
  * Custom hook for chart interaction handlers
@@ -20,22 +73,22 @@ export function useChartInteraction({
     isSessionBreakVisible,
     exchangeRef,
     dataRef,
-}) {
+}: UseChartInteractionOptions): UseChartInteractionReturn {
     // Context menu state
-    const [contextMenu, setContextMenu] = useState({ show: false, x: 0, y: 0 });
-    const [priceScaleMenu, setPriceScaleMenu] = useState({ visible: false, x: 0, y: 0, price: null });
+    const [contextMenu, setContextMenu] = useState<ContextMenu>({ show: false, x: 0, y: 0 });
+    const [priceScaleMenu, setPriceScaleMenu] = useState<PriceScaleMenu>({ visible: false, x: 0, y: 0, price: null });
 
     // Shift+Click Quick Measure Tool refs and state
-    const isShiftPressedRef = useRef(false);
-    const measureStartPointRef = useRef(null);
-    const [measureData, setMeasureData] = useState(null);
+    const isShiftPressedRef = useRef<boolean>(false);
+    const measureStartPointRef = useRef<any>(null);
+    const [measureData, setMeasureData] = useState<MeasureData | null>(null);
 
     // Keep track of active tool for the wrapper
-    const activeToolRef = useRef(activeTool);
+    const activeToolRef = useRef<string | null>(activeTool);
     useEffect(() => { activeToolRef.current = activeTool; }, [activeTool]);
 
     // Zoom helper function
-    const zoomChart = useCallback((zoomIn = true) => {
+    const zoomChart = useCallback((zoomIn: boolean = true) => {
         if (!chartRef.current) return;
 
         try {
@@ -175,12 +228,12 @@ export function useChartInteraction({
 
         if ((!isZoomIn && !isZoomOut) || !chartContainerRef?.current) return;
 
-        const handleZoomClick = (e) => {
+        const handleZoomClick = (e: MouseEvent) => {
             if (e.button !== 0) return;
             zoomChart(isZoomIn);
         };
 
-        const handleKeyDown = (e) => {
+        const handleKeyDown = (e: KeyboardEvent) => {
             if (e.key === 'Escape') {
                 e.preventDefault();
                 if (onToolUsed) onToolUsed();
@@ -201,7 +254,7 @@ export function useChartInteraction({
 
     // Shift+Click Quick Measure Tool - keyboard event listeners
     useEffect(() => {
-        const handleKeyDown = (e) => {
+        const handleKeyDown = (e: KeyboardEvent) => {
             if (e.key === 'Shift' && !isShiftPressedRef.current) {
                 isShiftPressedRef.current = true;
                 if (chartContainerRef?.current) {
@@ -210,7 +263,7 @@ export function useChartInteraction({
             }
         };
 
-        const handleKeyUp = (e) => {
+        const handleKeyUp = (e: KeyboardEvent) => {
             if (e.key === 'Shift') {
                 isShiftPressedRef.current = false;
                 measureStartPointRef.current = null;
@@ -234,7 +287,7 @@ export function useChartInteraction({
     useEffect(() => {
         if (!chartRef.current || !mainSeriesRef?.current) return;
 
-        const handleChartClick = (param) => {
+        const handleChartClick = (param: any) => {
             if (!isShiftPressedRef.current) return;
             if (!param.point || !param.time) return;
 
@@ -264,7 +317,7 @@ export function useChartInteraction({
 
                 const startTime = new Date(start.time * 1000);
                 const endTime = new Date(param.time * 1000);
-                const timeDiffMs = Math.abs(endTime - startTime);
+                const timeDiffMs = Math.abs(endTime.getTime() - startTime.getTime());
                 const timeElapsed = formatTimeDiff(timeDiffMs);
 
                 setMeasureData({
@@ -320,14 +373,14 @@ export function useChartInteraction({
                         const data = dataRef?.current;
                         if (!data || data.length === 0) return;
 
-                        const uniqueDates = new Set();
-                        data.forEach(candle => {
+                        const uniqueDates = new Set<string>();
+                        data.forEach((candle: any) => {
                             const date = new Date(candle.time * 1000);
                             const dateStr = date.toISOString().split('T')[0];
                             uniqueDates.add(dateStr);
                         });
 
-                        const sessionStartTimes = new Map();
+                        const sessionStartTimes = new Map<string, number>();
                         const currentExchange = exchangeRef?.current || 'NSE';
 
                         for (const dateStr of uniqueDates) {

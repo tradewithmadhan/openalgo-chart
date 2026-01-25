@@ -15,13 +15,38 @@ import { calculateHeikinAshi } from '../../../utils/chartUtils';
 import { calculateRenko } from '../../../utils/renkoUtils';
 import { CHART_COLORS } from '../../../utils/colorUtils';
 
+export interface OHLCData {
+  time: number;
+  open: number;
+  high: number;
+  low: number;
+  close: number;
+  volume?: number;
+}
+
+export interface SingleValueData {
+  time: number;
+  value: number;
+}
+
+export interface ChartAppearance {
+  candleUpColor?: string;
+  candleDownColor?: string;
+  wickUpColor?: string;
+  wickDownColor?: string;
+}
+
+export interface ChartColors {
+  upColor: string;
+  downColor: string;
+  wickUpColor: string;
+  wickDownColor: string;
+}
+
 /**
  * Transform OHLC data based on chart type
- * @param {Array} data - OHLC candle data
- * @param {string} type - Chart type
- * @returns {Array} Transformed data
  */
-export const transformData = (data, type) => {
+export const transformData = (data: OHLCData[], type: string): any[] => {
   if (!data || data.length === 0) return [];
 
   switch (type) {
@@ -40,10 +65,8 @@ export const transformData = (data, type) => {
 
 /**
  * Get default chart appearance colors
- * @param {Object} appearance - Chart appearance settings
- * @returns {Object} Color configuration
  */
-export const getChartColors = (appearance = {}) => {
+export const getChartColors = (appearance: ChartAppearance = {}): ChartColors => {
   return {
     upColor: appearance.candleUpColor || CHART_COLORS.UP.primary,
     downColor: appearance.candleDownColor || CHART_COLORS.DOWN.primary,
@@ -54,12 +77,8 @@ export const getChartColors = (appearance = {}) => {
 
 /**
  * Create appropriate series based on chart type
- * @param {Object} chart - Chart instance
- * @param {string} type - Chart type
- * @param {Object} appearance - Chart appearance settings
- * @returns {Object} Series instance
  */
-export const createSeries = (chart, type, appearance = {}) => {
+export const createSeries = (chart: any, type: string, appearance: ChartAppearance = {}): any => {
   const commonOptions = {
     lastValueVisible: true,
     priceScaleId: 'right',
@@ -165,9 +184,7 @@ export const SINGLE_VALUE_CHART_TYPES = ['line', 'area', 'baseline'];
 
 /**
  * Check if chart type uses single value data
- * @param {string} type - Chart type
- * @returns {boolean}
  */
-export const isSingleValueChartType = (type) => {
+export const isSingleValueChartType = (type: string): boolean => {
   return SINGLE_VALUE_CHART_TYPES.includes(type);
 };

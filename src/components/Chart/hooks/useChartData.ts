@@ -1,9 +1,9 @@
-import { useEffect, useRef, useCallback } from 'react';
+import { useEffect, useRef, useCallback, RefObject } from 'react';
 import { getKlines, getHistoricalKlines, subscribeToTicker } from '../../../services/openalgo';
 import { combineMultiLegOHLC } from '../../../services/optionChain';
 import { getAccurateISTTimestamp, syncTimeWithAPI, shouldResync } from '../../../services/timeService';
 import { intervalToSeconds } from '../../../utils/timeframes';
-import { logger } from '../../../utils/logger.js';
+import { logger } from '../../../utils/logger';
 import { transformData } from '../utils/seriesFactories';
 import { addFutureWhitespacePoints } from '../utils/chartHelpers';
 import {
@@ -11,6 +11,53 @@ import {
     PREFETCH_THRESHOLD,
     IST_OFFSET_SECONDS,
 } from '../utils/chartConfig';
+
+export interface StrategyLeg {
+    id: string;
+    symbol: string;
+    direction: 'buy' | 'sell';
+    quantity?: number;
+}
+
+export interface StrategyConfig {
+    legs: StrategyLeg[];
+    exchange?: string;
+}
+
+export interface UseChartDataOptions {
+    chartRef: RefObject<any>;
+    mainSeriesRef: RefObject<any>;
+    chartTypeRef: RefObject<string>;
+    dataRef: RefObject<any[]>;
+    symbol: string;
+    exchange: string;
+    interval: string;
+    strategyConfig?: StrategyConfig | null;
+    isReplayModeRef?: RefObject<boolean>;
+    priceScaleTimerRef?: RefObject<any>;
+    updateIndicators?: (data: any[], indicators: any[]) => void;
+    updateAxisLabel?: () => void;
+    updateOhlcFromLatest?: () => void;
+    applyDefaultCandlePosition?: (dataLength: number, window: number) => void;
+    indicatorsRef?: RefObject<any[]>;
+    onDataLoaded?: (data: any[], intervalSeconds: number) => void;
+}
+
+export interface UseChartDataReturn {
+    wsRef: RefObject<any>;
+    strategyWsRefs: RefObject<Record<string, any>>;
+    strategyDataRef: RefObject<Record<string, any[]>>;
+    strategyLatestRef: RefObject<Record<string, number>>;
+    isLoadingOlderDataRef: RefObject<boolean>;
+    hasMoreHistoricalDataRef: RefObject<boolean>;
+    oldestLoadedTimeRef: RefObject<number | null>;
+    abortControllerRef: RefObject<AbortController | null>;
+    symbolRef: RefObject<string>;
+    exchangeRef: RefObject<string>;
+    intervalRef: RefObject<string>;
+    loadOlderData: () => Promise<void>;
+    handleVisibleTimeRangeChange: (logicalRange: any) => void;
+}
 
 /**
  * Custom hook for chart data fetching, WebSocket subscription, and scroll-back loading
@@ -32,25 +79,25 @@ export function useChartData({
     applyDefaultCandlePosition,
     indicatorsRef,
     onDataLoaded,
-}) {
+}: UseChartDataOptions): UseChartDataReturn {
     // WebSocket refs
-    const wsRef = useRef(null);
-    const strategyWsRefs = useRef({}); // Map: legId -> WebSocket
-    const strategyDataRef = useRef({}); // Map: legId -> data array
-    const strategyLatestRef = useRef({}); // Map: legId -> latest price
+    const wsRef = useRef<any>(null);
+    const strategyWsRefs = useRef<Record<string, any>>({}); // Map: legId -> WebSocket
+    const strategyDataRef = useRef<Record<string, any[]>>({}); // Map: legId -> data array
+    const strategyLatestRef = useRef<Record<string, number>>({}); // Map: legId -> latest price
 
     // Historical data scroll loading refs
-    const isLoadingOlderDataRef = useRef(false);
-    const hasMoreHistoricalDataRef = useRef(true);
-    const oldestLoadedTimeRef = useRef(null);
-    const abortControllerRef = useRef(null);
+    const isLoadingOlderDataRef = useRef<boolean>(false);
+    const hasMoreHistoricalDataRef = useRef<boolean>(true);
+    const oldestLoadedTimeRef = useRef<number | null>(null);
+    const abortControllerRef = useRef<AbortController | null>(null);
     // HIGH FIX RC-2: Request ID pattern to discard stale scroll-back responses
-    const scrollBackRequestIdRef = useRef(0);
+    const scrollBackRequestIdRef = useRef<number>(0);
 
     // Symbol refs for closures
-    const symbolRef = useRef(symbol);
-    const exchangeRef = useRef(exchange);
-    const intervalRef = useRef(interval);
+    const symbolRef = useRef<string>(symbol);
+    const exchangeRef = useRef<string>(exchange);
+    const intervalRef = useRef<string>(interval);
 
     // Keep refs in sync with props
     useEffect(() => { symbolRef.current = symbol; }, [symbol]);
@@ -87,7 +134,7 @@ export function useChartData({
                 startDate.setFullYear(startDate.getFullYear() - 1);
             }
 
-            const formatDate = (d) => d.toISOString().split('T')[0];
+            const formatDate = (d: Date): string => d.toISOString().split('T')[0];
 
             logger.debug('[ScrollBack] Loading older data:', {
                 symbol: currentSymbol,
@@ -128,7 +175,7 @@ export function useChartData({
 
             // Filter out any candles that might overlap
             const existingOldestTime = dataRef.current[0]?.time || 0;
-            const filteredOlderData = olderData.filter(d => d.time < existingOldestTime);
+            const filteredOlderData = olderData.filter((d: any) => d.time < existingOldestTime);
 
             if (filteredOlderData.length === 0) {
                 logger.debug('[ScrollBack] All fetched data overlaps, no more available');
@@ -140,7 +187,7 @@ export function useChartData({
 
             // Save current visible range
             const timeScale = chartRef.current.timeScale();
-            let currentLogicalRange = null;
+            let currentLogicalRange: any = null;
             try {
                 currentLogicalRange = timeScale.getVisibleLogicalRange();
             } catch (e) {
@@ -155,7 +202,7 @@ export function useChartData({
             oldestLoadedTimeRef.current = newData[0].time;
 
             const activeType = chartTypeRef.current;
-            const transformedData = transformData(newData, activeType);
+            const transformedData = transformData(newData, activeType || 'candlestick');
             mainSeriesRef.current.setData(transformedData);
 
             // Restore visible range shifted by prepended count
@@ -174,7 +221,7 @@ export function useChartData({
                 updateIndicators(newData, currentIndicators);
             }
 
-        } catch (error) {
+        } catch (error: any) {
             if (error.name !== 'AbortError') {
                 logger.error('[ScrollBack] Error loading older data:', error);
             }
@@ -184,7 +231,7 @@ export function useChartData({
     }, [chartRef, mainSeriesRef, chartTypeRef, dataRef, isReplayModeRef, indicatorsRef, updateIndicators]);
 
     // Handle visible time range change for scroll-back loading
-    const handleVisibleTimeRangeChange = useCallback((logicalRange) => {
+    const handleVisibleTimeRangeChange = useCallback((logicalRange: any) => {
         if (!logicalRange) return;
 
         const fromIndex = Math.round(logicalRange.from);
@@ -199,7 +246,7 @@ export function useChartData({
         if (!chartRef.current) return;
 
         let cancelled = false;
-        let indicatorFrame = null;
+        let indicatorFrame: number | null = null;
         const abortController = new AbortController();
 
         // MEDIUM FIX RC-8: Capture strategy config at effect start to detect changes during load
@@ -228,7 +275,7 @@ export function useChartData({
 
         const loadData = async () => {
             try {
-                let data;
+                let data: any[];
 
                 // Check if we're in strategy mode (multi-leg)
                 if (strategyConfig && strategyConfig.legs?.length >= 2) {
@@ -245,7 +292,7 @@ export function useChartData({
                         strategyDataRef.current[leg.id] = legDataArrays[i];
                     });
 
-                    data = combineMultiLegOHLC(legDataArrays, strategyConfig.legs);
+                    data = combineMultiLegOHLC(legDataArrays, strategyConfig.legs as any);
                     logger.debug('[Strategy] Combined data length:', data.length);
                 } else {
                     data = await getKlines(symbol, exchange, interval, 1000, abortController.signal);
@@ -258,7 +305,7 @@ export function useChartData({
                     oldestLoadedTimeRef.current = data[0].time;
 
                     const activeType = chartTypeRef.current;
-                    const transformedData = transformData(data, activeType);
+                    const transformedData = transformData(data, activeType || 'candlestick');
                     const intervalSeconds = intervalToSeconds(interval);
                     const dataWithFuture = addFutureWhitespacePoints(transformedData, intervalSeconds);
                     mainSeriesRef.current.setData(dataWithFuture);
@@ -305,17 +352,17 @@ export function useChartData({
                     dataRef.current = [];
                     mainSeriesRef.current?.setData([]);
                 }
-            } catch (error) {
+            } catch (error: any) {
                 if (error.name === 'AbortError') return;
                 logger.error('Error loading chart data:', error);
             }
         };
 
         // Setup strategy mode WebSockets
-        const setupStrategyWebSockets = (config, cancelled) => {
+        const setupStrategyWebSockets = (config: StrategyConfig, cancelled: boolean) => {
             const strategyExchange = config.exchange || 'NFO';
 
-            const handleStrategyTick = (legConfig) => (ticker) => {
+            const handleStrategyTick = (legConfig: StrategyLeg) => (ticker: any) => {
                 if (cancelled || !ticker) return;
 
                 const closePrice = Number(ticker.close);
@@ -360,8 +407,8 @@ export function useChartData({
         };
 
         // Setup regular WebSocket
-        const setupRegularWebSocket = (cancelled) => {
-            wsRef.current = subscribeToTicker(symbol, exchange, interval, (ticker) => {
+        const setupRegularWebSocket = (cancelled: boolean) => {
+            wsRef.current = subscribeToTicker(symbol, exchange, interval, (ticker: any) => {
                 if (cancelled || !ticker) return;
 
                 const closePrice = Number(ticker.close);
@@ -376,7 +423,7 @@ export function useChartData({
         };
 
         // Update candle with tick data
-        const updateCandleWithTick = (closePrice, cancelled, tickVolume = 0) => {
+        const updateCandleWithTick = (closePrice: number, cancelled: boolean, tickVolume: number = 0) => {
             const originalData = dataRef.current;
             if (!originalData || originalData.length === 0) return;
 
@@ -395,7 +442,7 @@ export function useChartData({
             const currentCandleTime = Math.floor(currentISTTime / intervalSeconds) * intervalSeconds;
             const needNewCandle = currentCandleTime > lastCandleTime;
 
-            let candle;
+            let candle: any;
             if (needNewCandle) {
                 candle = {
                     time: currentCandleTime,
@@ -429,11 +476,11 @@ export function useChartData({
                 return;
             }
             const currentChartType = chartTypeRef.current;
-            const transformedCandle = transformData([candle], currentChartType)[0];
+            const transformedCandle = transformData([candle], currentChartType || 'candlestick')[0];
 
             if (transformedCandle && mainSeriesRef.current && !isReplayModeRef?.current) {
                 try {
-                    const transformedFullData = transformData(currentData, currentChartType);
+                    const transformedFullData = transformData(currentData, currentChartType || 'candlestick');
                     const dataWithFuture = addFutureWhitespacePoints(transformedFullData, intervalSeconds);
                     mainSeriesRef.current.setData(dataWithFuture);
                 } catch (setDataErr) {

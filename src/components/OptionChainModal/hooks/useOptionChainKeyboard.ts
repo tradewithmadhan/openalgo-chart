@@ -1,9 +1,31 @@
-import { useCallback, useEffect } from 'react';
-
 /**
+ * useOptionChainKeyboard Hook
  * Custom hook for option chain keyboard navigation
  * Handles arrow keys for row/column navigation and Enter for selection
  */
+import { useCallback } from 'react';
+
+export interface ChainDataRow {
+    ce?: { symbol: string; [key: string]: any };
+    pe?: { symbol: string; [key: string]: any };
+    [key: string]: any;
+}
+
+export interface UseOptionChainKeyboardParams {
+    chainData: ChainDataRow[];
+    focusedRow: number;
+    setFocusedRow: React.Dispatch<React.SetStateAction<number>>;
+    focusedCol: 'ce' | 'pe';
+    setFocusedCol: React.Dispatch<React.SetStateAction<'ce' | 'pe'>>;
+    onOptionClick: (symbol: string) => void;
+    onClose: () => void;
+}
+
+export interface UseOptionChainKeyboardReturn {
+    handleKeyDown: (e: React.KeyboardEvent) => void;
+    handleCellClick: (rowIndex: number, col: 'ce' | 'pe', symbol: string) => void;
+}
+
 export function useOptionChainKeyboard({
     chainData,
     focusedRow,
@@ -12,9 +34,9 @@ export function useOptionChainKeyboard({
     setFocusedCol,
     onOptionClick,
     onClose,
-}) {
+}: UseOptionChainKeyboardParams): UseOptionChainKeyboardReturn {
     // Keyboard navigation handler
-    const handleKeyDown = useCallback((e) => {
+    const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
         if (chainData.length === 0) return;
 
         if (e.key === 'ArrowDown') {
@@ -37,7 +59,7 @@ export function useOptionChainKeyboard({
     }, [chainData, focusedRow, focusedCol, setFocusedRow, setFocusedCol, onOptionClick, onClose]);
 
     // Click handler that also updates focus
-    const handleCellClick = useCallback((rowIndex, col, symbol) => {
+    const handleCellClick = useCallback((rowIndex: number, col: 'ce' | 'pe', symbol: string) => {
         setFocusedRow(rowIndex);
         setFocusedCol(col);
         onOptionClick(symbol);

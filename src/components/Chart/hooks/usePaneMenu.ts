@@ -3,20 +3,49 @@
  * Handles pane context menu operations (maximize, collapse, move, delete)
  */
 
-import { useState, useCallback } from 'react';
+import { useState, useCallback, RefObject } from 'react';
 import logger from '../../../utils/logger';
+
+export interface PaneContextMenu {
+    show: boolean;
+    x: number;
+    y: number;
+    paneId: string | null;
+}
+
+export interface UsePaneMenuOptions {
+    chartRef: RefObject<any>;
+    chartContainerRef?: RefObject<HTMLDivElement>;
+    indicatorPanesMap: RefObject<Map<string, any>>;
+    onIndicatorRemove?: (paneId: string) => void;
+    onIndicatorMoveUp?: (paneId: string) => void;
+}
+
+export interface UsePaneMenuReturn {
+    paneContextMenu: PaneContextMenu;
+    maximizedPane: string | null;
+    collapsedPanes: Set<string>;
+    handlePaneMenu: (paneId: string, x: number, y: number) => void;
+    closePaneMenu: () => void;
+    handleMaximizePane: (paneId: string) => void;
+    handleCollapsePane: (paneId: string) => void;
+    handleMovePaneUp: (paneId: string) => void;
+    handleDeletePane: (paneId: string) => void;
+    canPaneMoveUp: (paneId: string) => boolean;
+}
 
 /**
  * Custom hook for managing pane context menu and pane operations
- * @param {Object} options - Hook options
- * @param {React.RefObject} options.chartRef - Reference to the chart instance
- * @param {React.RefObject} options.indicatorPanesMap - Map of indicator IDs to pane instances
- * @param {Function} options.onIndicatorRemove - Callback when indicator is removed
- * @returns {Object} Pane menu state and handlers
  */
-export const usePaneMenu = ({ chartRef, chartContainerRef, indicatorPanesMap, onIndicatorRemove, onIndicatorMoveUp }) => {
+export const usePaneMenu = ({
+    chartRef,
+    chartContainerRef,
+    indicatorPanesMap,
+    onIndicatorRemove,
+    onIndicatorMoveUp
+}: UsePaneMenuOptions): UsePaneMenuReturn => {
     // Pane context menu state
-    const [paneContextMenu, setPaneContextMenu] = useState({
+    const [paneContextMenu, setPaneContextMenu] = useState<PaneContextMenu>({
         show: false,
         x: 0,
         y: 0,
@@ -24,11 +53,11 @@ export const usePaneMenu = ({ chartRef, chartContainerRef, indicatorPanesMap, on
     });
 
     // Track maximized and collapsed panes
-    const [maximizedPane, setMaximizedPane] = useState(null);
-    const [collapsedPanes, setCollapsedPanes] = useState(new Set());
+    const [maximizedPane, setMaximizedPane] = useState<string | null>(null);
+    const [collapsedPanes, setCollapsedPanes] = useState<Set<string>>(new Set());
 
     // Show pane context menu
-    const handlePaneMenu = useCallback((paneId, x, y) => {
+    const handlePaneMenu = useCallback((paneId: string, x: number, y: number) => {
         setPaneContextMenu({ show: true, x, y, paneId });
     }, []);
 
@@ -38,7 +67,7 @@ export const usePaneMenu = ({ chartRef, chartContainerRef, indicatorPanesMap, on
     }, []);
 
     // Maximize/Restore pane
-    const handleMaximizePane = useCallback((paneId) => {
+    const handleMaximizePane = useCallback((paneId: string) => {
         if (!chartRef.current || !chartContainerRef?.current) return;
 
         try {
@@ -52,7 +81,7 @@ export const usePaneMenu = ({ chartRef, chartContainerRef, indicatorPanesMap, on
                 let usedHeight = 0;
 
                 // First, reset all indicator panes (index > 0)
-                allPanes.forEach((pane, index) => {
+                allPanes.forEach((pane: any, index: number) => {
                     if (index === 0) return; // Skip main pane for now
                     try {
                         const defaultHeight = 100; // Default indicator height
@@ -71,10 +100,10 @@ export const usePaneMenu = ({ chartRef, chartContainerRef, indicatorPanesMap, on
                 setMaximizedPane(null);
             } else {
                 // MAXIMIZE: Expand target pane to full height, collapse others
-                const targetPane = indicatorPanesMap.current.get(paneId);
+                const targetPane = indicatorPanesMap.current?.get(paneId);
                 if (!targetPane) return;
 
-                allPanes.forEach((pane) => {
+                allPanes.forEach((pane: any) => {
                     try {
                         if (pane === targetPane) {
                             pane.setHeight(totalHeight); // Take full height
@@ -91,11 +120,11 @@ export const usePaneMenu = ({ chartRef, chartContainerRef, indicatorPanesMap, on
     }, [chartRef, chartContainerRef, indicatorPanesMap, maximizedPane]);
 
     // Collapse/Expand pane
-    const handleCollapsePane = useCallback((paneId) => {
+    const handleCollapsePane = useCallback((paneId: string) => {
         if (!chartRef.current) return;
 
         try {
-            const pane = indicatorPanesMap.current.get(paneId);
+            const pane = indicatorPanesMap.current?.get(paneId);
             if (!pane) return;
 
             // If we are collapsing the currently maximized pane, we must first "un-maximize" everything
@@ -103,7 +132,7 @@ export const usePaneMenu = ({ chartRef, chartContainerRef, indicatorPanesMap, on
                 const allPanes = chartRef.current.panes ? chartRef.current.panes() : [];
 
                 // Reset all to default first
-                allPanes.forEach((p, index) => {
+                allPanes.forEach((p: any, index: number) => {
                     if (index === 0) return;
                     try { p.setHeight(100); } catch (e) { }
                 });
@@ -131,7 +160,7 @@ export const usePaneMenu = ({ chartRef, chartContainerRef, indicatorPanesMap, on
     }, [chartRef, indicatorPanesMap, collapsedPanes, maximizedPane]);
 
     // Move pane up
-    const handleMovePaneUp = useCallback((paneId) => {
+    const handleMovePaneUp = useCallback((paneId: string) => {
         // Use the passed callback to reorder indicators in the parent state
         if (onIndicatorMoveUp) {
             onIndicatorMoveUp(paneId);
@@ -139,7 +168,7 @@ export const usePaneMenu = ({ chartRef, chartContainerRef, indicatorPanesMap, on
             // Fallback for theoretical future support or if used in context where movePane exists
             try {
                 const allPanes = chartRef.current.panes ? chartRef.current.panes() : [];
-                const pane = indicatorPanesMap.current.get(paneId);
+                const pane = indicatorPanesMap.current?.get(paneId);
                 if (!pane) return;
                 const currentIndex = allPanes.indexOf(pane);
                 if (currentIndex > 1) {
@@ -150,18 +179,18 @@ export const usePaneMenu = ({ chartRef, chartContainerRef, indicatorPanesMap, on
     }, [chartRef, indicatorPanesMap, onIndicatorMoveUp]);
 
     // Delete pane (uses existing onIndicatorRemove)
-    const handleDeletePane = useCallback((paneId) => {
+    const handleDeletePane = useCallback((paneId: string) => {
         if (onIndicatorRemove) {
             onIndicatorRemove(paneId);
         }
     }, [onIndicatorRemove]);
 
     // Check if pane can move up (not first pane after main)
-    const canPaneMoveUp = useCallback((paneId) => {
+    const canPaneMoveUp = useCallback((paneId: string): boolean => {
         if (!chartRef.current) return false;
         try {
             const allPanes = chartRef.current.panes ? chartRef.current.panes() : [];
-            const pane = indicatorPanesMap.current.get(paneId);
+            const pane = indicatorPanesMap.current?.get(paneId);
             if (!pane) return false;
             const currentIndex = allPanes.indexOf(pane);
             return currentIndex > 1; // Index 0 is main, index 1 is first indicator pane

@@ -11,10 +11,49 @@ import {
 } from 'lightweight-charts';
 import { CHART_COLORS } from '../../../utils/colorUtils';
 
+export interface IndicatorConfig {
+    type: string;
+    period?: number;
+    color?: string;
+    overbought?: number;
+    overboughtColor?: string;
+    oversold?: number;
+    oversoldColor?: string;
+    predictionColor?: string;
+    threshold?: number;
+    longColor?: string;
+    shortColor?: string;
+    rsiColor?: string;
+    emaColor?: string;
+    wmaColor?: string;
+    bullFillColor?: string;
+    bearFillColor?: string;
+    midlineColor?: string;
+    adxColor?: string;
+    plusDIColor?: string;
+    minusDIColor?: string;
+    lineWidth?: number;
+    tenkanColor?: string;
+    kijunColor?: string;
+    senkouAColor?: string;
+    senkouBColor?: string;
+    chikouColor?: string;
+    pivotColor?: string;
+    resistanceColor?: string;
+    supportColor?: string;
+    showTitle?: boolean;
+    [key: string]: any;
+}
+
+export interface SeriesResult {
+    series: any;
+    pane?: any;
+}
+
 /**
  * Create SMA/EMA/VWAP series (overlay on main chart)
  */
-export const createOverlaySeries = (chart) => {
+export const createOverlaySeries = (chart: any): any => {
     return chart.addSeries(LineSeries, {
         lineWidth: 2,
         priceLineVisible: false,
@@ -25,7 +64,7 @@ export const createOverlaySeries = (chart) => {
 /**
  * Create ATR series in separate pane
  */
-export const createATRSeries = (chart) => {
+export const createATRSeries = (chart: any): { series: any; pane: any } => {
     const pane = chart.addPane({ height: 100 });
     const series = pane.addSeries(LineSeries, {
         lineWidth: 2,
@@ -38,7 +77,7 @@ export const createATRSeries = (chart) => {
 /**
  * Create RSI series in separate pane with OB/OS lines
  */
-export const createRSISeries = (chart, ind) => {
+export const createRSISeries = (chart: any, ind: IndicatorConfig): { series: any; pane: any } => {
     const pane = chart.addPane({ height: 100 });
     const series = pane.addSeries(LineSeries, {
         lineWidth: 2,
@@ -47,7 +86,7 @@ export const createRSISeries = (chart, ind) => {
     });
 
     // Add OB/OS lines for RSI
-    series._obLine = series.createPriceLine({
+    (series as any)._obLine = series.createPriceLine({
         price: ind.overbought || 70,
         color: ind.overboughtColor || CHART_COLORS.DOWN.primary,
         lineWidth: 1,
@@ -55,7 +94,7 @@ export const createRSISeries = (chart, ind) => {
         axisLabelVisible: false,
         title: ''
     });
-    series._osLine = series.createPriceLine({
+    (series as any)._osLine = series.createPriceLine({
         price: ind.oversold || 30,
         color: ind.oversoldColor || CHART_COLORS.UP.primary,
         lineWidth: 1,
@@ -70,7 +109,7 @@ export const createRSISeries = (chart, ind) => {
 /**
  * Create Stochastic series in separate pane (%K and %D lines)
  */
-export const createStochasticSeries = (chart) => {
+export const createStochasticSeries = (chart: any): { series: any; pane: any } => {
     const pane = chart.addPane({ height: 100 });
     const series = {
         k: pane.addSeries(LineSeries, {
@@ -92,7 +131,7 @@ export const createStochasticSeries = (chart) => {
 /**
  * Create MACD series in separate pane (histogram, MACD, signal lines)
  */
-export const createMACDSeries = (chart) => {
+export const createMACDSeries = (chart: any): { series: any; pane: any } => {
     const pane = chart.addPane({ height: 120 });
     const series = {
         histogram: pane.addSeries(HistogramSeries, {
@@ -118,7 +157,7 @@ export const createMACDSeries = (chart) => {
 /**
  * Create Bollinger Bands series (3 overlay lines)
  */
-export const createBollingerBandsSeries = (chart) => {
+export const createBollingerBandsSeries = (chart: any): any => {
     return {
         upper: chart.addSeries(LineSeries, {
             lineWidth: 1,
@@ -142,7 +181,7 @@ export const createBollingerBandsSeries = (chart) => {
 /**
  * Create Supertrend series (overlay)
  */
-export const createSupertrendSeries = (chart, isVisible) => {
+export const createSupertrendSeries = (chart: any, isVisible: boolean): any => {
     return chart.addSeries(LineSeries, {
         lineWidth: 2,
         priceLineVisible: false,
@@ -154,7 +193,7 @@ export const createSupertrendSeries = (chart, isVisible) => {
 /**
  * Create Volume series (histogram only - TradingView style)
  */
-export const createVolumeSeries = (chart, ind) => {
+export const createVolumeSeries = (chart: any, _ind: IndicatorConfig): { bars: any } => {
     const volumeBars = chart.addSeries(HistogramSeries, {
         priceFormat: { type: 'volume' },
         priceScaleId: 'volume',
@@ -170,7 +209,7 @@ export const createVolumeSeries = (chart, ind) => {
 /**
  * Create ANN Strategy series (prediction pane + background areas)
  */
-export const createANNStrategySeries = (chart, ind) => {
+export const createANNStrategySeries = (chart: any, ind: IndicatorConfig): { series: any; pane: any } => {
     const pane = chart.addPane({ height: 100 });
 
     // Area series for prediction visualization
@@ -185,7 +224,7 @@ export const createANNStrategySeries = (chart, ind) => {
 
     // Add threshold lines
     const thresholdValue = ind.threshold || 0.0014;
-    annArea._upperThreshold = annArea.createPriceLine({
+    (annArea as any)._upperThreshold = annArea.createPriceLine({
         price: thresholdValue,
         color: ind.longColor || '#26A69A',
         lineWidth: 1,
@@ -193,7 +232,7 @@ export const createANNStrategySeries = (chart, ind) => {
         axisLabelVisible: false,
         title: ''
     });
-    annArea._lowerThreshold = annArea.createPriceLine({
+    (annArea as any)._lowerThreshold = annArea.createPriceLine({
         price: -thresholdValue,
         color: ind.shortColor || '#EF5350',
         lineWidth: 1,
@@ -201,7 +240,7 @@ export const createANNStrategySeries = (chart, ind) => {
         axisLabelVisible: false,
         title: ''
     });
-    annArea._zeroLine = annArea.createPriceLine({
+    (annArea as any)._zeroLine = annArea.createPriceLine({
         price: 0,
         color: '#666666',
         lineWidth: 1,
@@ -244,7 +283,7 @@ export const createANNStrategySeries = (chart, ind) => {
 /**
  * Create Hilenga-Milenga series in separate pane
  */
-export const createHilengaMilengaSeries = (chart, ind) => {
+export const createHilengaMilengaSeries = (chart: any, ind: IndicatorConfig): { series: any; pane: any } => {
     const pane = chart.addPane({ height: 120 });
 
     // RSI line
@@ -287,7 +326,7 @@ export const createHilengaMilengaSeries = (chart, ind) => {
     });
 
     // Add midline at 50
-    hmRsi._midline = hmRsi.createPriceLine({
+    (hmRsi as any)._midline = hmRsi.createPriceLine({
         price: 50,
         color: ind.midlineColor || '#787B86',
         lineWidth: 1,
@@ -305,7 +344,7 @@ export const createHilengaMilengaSeries = (chart, ind) => {
 /**
  * Create ADX series in separate pane
  */
-export const createADXSeries = (chart, ind) => {
+export const createADXSeries = (chart: any, ind: IndicatorConfig): { series: any; pane: any } => {
     const pane = chart.addPane({ height: 100 });
     const series = {
         adx: pane.addSeries(LineSeries, {
@@ -332,7 +371,7 @@ export const createADXSeries = (chart, ind) => {
     };
 
     // Add reference lines
-    series.adx._line20 = series.adx.createPriceLine({
+    (series.adx as any)._line20 = series.adx.createPriceLine({
         price: 20,
         color: '#555',
         lineWidth: 1,
@@ -340,7 +379,7 @@ export const createADXSeries = (chart, ind) => {
         axisLabelVisible: false,
         title: ''
     });
-    series.adx._line25 = series.adx.createPriceLine({
+    (series.adx as any)._line25 = series.adx.createPriceLine({
         price: 25,
         color: '#777',
         lineWidth: 1,
@@ -355,7 +394,7 @@ export const createADXSeries = (chart, ind) => {
 /**
  * Create Ichimoku Cloud series (5 overlay lines)
  */
-export const createIchimokuSeries = (chart, ind) => {
+export const createIchimokuSeries = (chart: any, ind: IndicatorConfig): any => {
     return {
         tenkan: chart.addSeries(LineSeries, {
             color: ind.tenkanColor || '#2962FF',
@@ -398,7 +437,7 @@ export const createIchimokuSeries = (chart, ind) => {
 /**
  * Create Pivot Points series (7 overlay lines)
  */
-export const createPivotPointsSeries = (chart, ind) => {
+export const createPivotPointsSeries = (chart: any, ind: IndicatorConfig): any => {
     const lineWidth = ind.lineWidth || 1;
     const pivotColor = ind.pivotColor || '#FF9800';
     const resistanceColor = ind.resistanceColor || '#EF5350';
@@ -466,12 +505,8 @@ export const createPivotPointsSeries = (chart, ind) => {
 
 /**
  * Main factory function - creates series for any indicator type
- * @param {Object} chart - The chart instance
- * @param {Object} ind - Indicator configuration
- * @param {boolean} isVisible - Whether the indicator is visible
- * @returns {Object} { series, pane } - Created series and optional pane
  */
-export const createIndicatorSeries = (chart, ind, isVisible = true) => {
+export const createIndicatorSeries = (chart: any, ind: IndicatorConfig, isVisible: boolean = true): SeriesResult | null => {
     const { type } = ind;
 
     switch (type) {

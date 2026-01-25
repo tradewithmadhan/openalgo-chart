@@ -17,13 +17,30 @@ export const INDICATOR_CLEANUP_TYPES = {
   SERIES_ARRAY: 'series_array',         // Array of series (First Candle, Range Breakout, PAR)
   PRIMITIVE: 'primitive',               // Attached primitives (TPO, Risk Calculator)
   COMPLEX: 'complex'                    // Complex with multiple cleanup steps
-};
+} as const;
+
+export type IndicatorCleanupType = typeof INDICATOR_CLEANUP_TYPES[keyof typeof INDICATOR_CLEANUP_TYPES];
+
+export interface IndicatorMetadata {
+  cleanupType: IndicatorCleanupType;
+  pane: string;
+  hasPane: boolean;
+  hasPriceLines?: boolean;
+  priceLineKeys?: string[];
+  seriesKeys?: string[];
+  hasPrimitive?: boolean;
+  primitiveRef?: string;
+  attachedTo?: string;
+  arrayRef?: string;
+  hasMarkers?: boolean;
+  description: string;
+}
 
 /**
  * Main indicator metadata registry
  * Each indicator type defines its cleanup requirements and characteristics
  */
-export const INDICATOR_REGISTRY = {
+export const INDICATOR_REGISTRY: Record<string, IndicatorMetadata> = {
   // ==================== SIMPLE OVERLAYS ====================
   sma: {
     cleanupType: INDICATOR_CLEANUP_TYPES.SIMPLE_SERIES,
@@ -214,28 +231,22 @@ export const INDICATOR_REGISTRY = {
 
 /**
  * Get metadata for a specific indicator type
- * @param {string} indicatorType - The type of indicator (e.g., 'sma', 'rsi')
- * @returns {Object|null} Metadata object or null if not found
  */
-export function getIndicatorMetadata(indicatorType) {
+export function getIndicatorMetadata(indicatorType: string): IndicatorMetadata | null {
   return INDICATOR_REGISTRY[indicatorType] || null;
 }
 
 /**
  * Check if an indicator type exists in the registry
- * @param {string} indicatorType - The type of indicator
- * @returns {boolean} True if the indicator type exists
  */
-export function isValidIndicatorType(indicatorType) {
+export function isValidIndicatorType(indicatorType: string): boolean {
   return indicatorType in INDICATOR_REGISTRY;
 }
 
 /**
  * Get all indicators of a specific cleanup type
- * @param {string} cleanupType - The cleanup type constant
- * @returns {Array<string>} Array of indicator type keys
  */
-export function getIndicatorsByCleanupType(cleanupType) {
+export function getIndicatorsByCleanupType(cleanupType: IndicatorCleanupType): string[] {
   return Object.keys(INDICATOR_REGISTRY).filter(
     key => INDICATOR_REGISTRY[key].cleanupType === cleanupType
   );
@@ -243,9 +254,8 @@ export function getIndicatorsByCleanupType(cleanupType) {
 
 /**
  * Get all indicators that have a separate pane
- * @returns {Array<string>} Array of indicator type keys
  */
-export function getIndicatorsWithPane() {
+export function getIndicatorsWithPane(): string[] {
   return Object.keys(INDICATOR_REGISTRY).filter(
     key => INDICATOR_REGISTRY[key].hasPane === true
   );
@@ -253,9 +263,8 @@ export function getIndicatorsWithPane() {
 
 /**
  * Get all indicators that have price lines
- * @returns {Array<string>} Array of indicator type keys
  */
-export function getIndicatorsWithPriceLines() {
+export function getIndicatorsWithPriceLines(): string[] {
   return Object.keys(INDICATOR_REGISTRY).filter(
     key => INDICATOR_REGISTRY[key].hasPriceLines === true
   );
@@ -263,9 +272,8 @@ export function getIndicatorsWithPriceLines() {
 
 /**
  * Get all indicators that use primitives
- * @returns {Array<string>} Array of indicator type keys
  */
-export function getIndicatorsWithPrimitives() {
+export function getIndicatorsWithPrimitives(): string[] {
   return Object.keys(INDICATOR_REGISTRY).filter(
     key => INDICATOR_REGISTRY[key].hasPrimitive === true
   );
@@ -273,21 +281,25 @@ export function getIndicatorsWithPrimitives() {
 
 /**
  * Get all indicators that use array-based series
- * @returns {Array<string>} Array of indicator type keys
  */
-export function getArrayBasedIndicators() {
+export function getArrayBasedIndicators(): string[] {
   return Object.keys(INDICATOR_REGISTRY).filter(
     key => INDICATOR_REGISTRY[key].cleanupType === INDICATOR_CLEANUP_TYPES.SERIES_ARRAY
   );
 }
 
+export interface ValidationResult {
+  valid: boolean;
+  errors: string[];
+  totalIndicators: number;
+}
+
 /**
  * Validate that all required metadata fields are present
  * Useful for development/testing
- * @returns {Object} Validation results with any errors
  */
-export function validateMetadataRegistry() {
-  const errors = [];
+export function validateMetadataRegistry(): ValidationResult {
+  const errors: string[] = [];
 
   Object.keys(INDICATOR_REGISTRY).forEach(type => {
     const metadata = INDICATOR_REGISTRY[type];

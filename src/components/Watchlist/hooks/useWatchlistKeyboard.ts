@@ -4,16 +4,34 @@
  */
 import { useState, useCallback } from 'react';
 
+export interface StockItem {
+    symbol: string;
+    exchange?: string;
+    [key: string]: any;
+}
+
+export interface SymbolData {
+    symbol: string;
+    exchange: string;
+}
+
+export interface UseWatchlistKeyboardReturn {
+    focusedIndex: number;
+    setFocusedIndex: React.Dispatch<React.SetStateAction<number>>;
+    handleKeyDown: (e: React.KeyboardEvent) => void;
+    handleSymbolSelect: (symData: SymbolData) => void;
+}
+
 /**
  * Hook for keyboard navigation in watchlist
- * @param {Array} stockItems - Filtered stock items (excluding sections)
- * @param {Function} onSymbolSelect - Callback when symbol is selected
- * @returns {Object} Keyboard navigation state and handlers
  */
-export const useWatchlistKeyboard = (stockItems, onSymbolSelect) => {
+export const useWatchlistKeyboard = (
+    stockItems: StockItem[],
+    onSymbolSelect: (symData: SymbolData) => void
+): UseWatchlistKeyboardReturn => {
     const [focusedIndex, setFocusedIndex] = useState(-1);
 
-    const handleKeyDown = useCallback((e) => {
+    const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
         if (!stockItems || stockItems.length === 0) return;
 
         if (e.key === 'ArrowDown') {
@@ -37,8 +55,7 @@ export const useWatchlistKeyboard = (stockItems, onSymbolSelect) => {
         }
     }, [stockItems, focusedIndex, onSymbolSelect]);
 
-    // Wrapper for onSymbolSelect that also updates focusedIndex
-    const handleSymbolSelect = useCallback((symData) => {
+    const handleSymbolSelect = useCallback((symData: SymbolData) => {
         const idx = stockItems.findIndex(
             i => i.symbol === symData.symbol && i.exchange === (symData.exchange || 'NSE')
         );
