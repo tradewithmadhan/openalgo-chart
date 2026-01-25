@@ -2,12 +2,31 @@
  * Settings Constants
  * Default values and section definitions
  */
-import { Keyboard } from 'lucide-react';
-import React from 'react';
 import { CHART_COLORS } from '../../../utils/colorUtils';
 
+export interface ChartAppearance {
+    candleUpColor: string;
+    candleDownColor: string;
+    wickUpColor: string;
+    wickDownColor: string;
+    showVerticalGridLines: boolean;
+    showHorizontalGridLines: boolean;
+    darkBackground: string;
+    lightBackground: string;
+    darkGridColor: string;
+    lightGridColor: string;
+    [key: string]: string | boolean;
+}
+
+export interface SettingsSection {
+    id: string;
+    label: string;
+    iconPath?: string;
+    useKeyboardIcon?: boolean;
+}
+
 // Default chart appearance for reset
-export const DEFAULT_CHART_APPEARANCE = {
+export const DEFAULT_CHART_APPEARANCE: ChartAppearance = {
     candleUpColor: CHART_COLORS.UP.primary,
     candleDownColor: CHART_COLORS.DOWN.primary,
     wickUpColor: CHART_COLORS.UP.primary,
@@ -21,7 +40,7 @@ export const DEFAULT_CHART_APPEARANCE = {
 };
 
 // Settings section definitions
-export const SETTINGS_SECTIONS = [
+export const SETTINGS_SECTIONS: SettingsSection[] = [
     {
         id: 'scales',
         label: 'Scales and lines',

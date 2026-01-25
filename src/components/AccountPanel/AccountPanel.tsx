@@ -951,7 +951,7 @@ const AccountPanel: React.FC<AccountPanelProps> = ({
             {/* Exit Position Modal */}
             <ExitPositionModal
                 isOpen={isExitModalOpen}
-                position={selectedPositionForExit}
+                position={selectedPositionForExit as any}
                 onClose={handleExitModalClose}
                 onExitComplete={handleExitComplete}
                 showToast={showToast}

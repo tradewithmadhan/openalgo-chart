@@ -3,7 +3,28 @@
  * Defines metadata and colors for the application themes.
  */
 
-export const THEMES = {
+export interface ThemeColors {
+    background: string;
+    text: string;
+    grid: string;
+    crosshair: string;
+    textColor: string;
+    borderColor: string;
+    [key: string]: string;
+}
+
+export interface Theme {
+    id: string;
+    name: string;
+    type: 'dark' | 'light';
+    colors: ThemeColors;
+}
+
+export interface ThemesMap {
+    [key: string]: Theme;
+}
+
+export const THEMES: ThemesMap = {
     dark: {
         id: 'dark',
         name: 'Dark (Default)',

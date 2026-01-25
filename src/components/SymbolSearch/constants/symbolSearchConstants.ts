@@ -3,8 +3,22 @@
  * Filter tabs and default symbols
  */
 
+export interface FilterTab {
+    id?: string;
+    label: string;
+    exchange: string | null;
+    instrumenttype: string | null;
+}
+
+export interface PopularSymbol {
+    symbol: string;
+    exchange: string;
+    instrumenttype: string;
+    name: string;
+}
+
 // Filter tabs with their corresponding API parameters
-export const FILTER_TABS = [
+export const FILTER_TABS: FilterTab[] = [
     { label: 'All', exchange: null, instrumenttype: null },
     { label: 'Stocks', exchange: 'NSE', instrumenttype: 'EQ' },
     { label: 'Futures', exchange: 'NFO', instrumenttype: 'FUT' },
@@ -13,7 +27,7 @@ export const FILTER_TABS = [
 ];
 
 // Default popular symbols shown on initial load
-export const DEFAULT_POPULAR_SYMBOLS = [
+export const DEFAULT_POPULAR_SYMBOLS: PopularSymbol[] = [
     { symbol: 'NIFTY', exchange: 'NSE_INDEX', instrumenttype: 'INDEX', name: 'Nifty 50 Index' },
     { symbol: 'BANKNIFTY', exchange: 'NSE_INDEX', instrumenttype: 'INDEX', name: 'Nifty Bank Index' },
     { symbol: 'CNXSMALLCAP', exchange: 'NSE_INDEX', instrumenttype: 'INDEX', name: 'Nifty SmallCap 100 Index' },

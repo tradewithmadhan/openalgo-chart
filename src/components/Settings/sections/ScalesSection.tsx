@@ -7,9 +7,9 @@ import styles from '../SettingsPopup.module.css';
 
 export interface ScalesSectionProps {
     isTimerVisible: boolean;
-    onTimerToggle?: () => void;
+    onTimerToggle?: ((visible: boolean) => void) | (() => void);
     isSessionBreakVisible: boolean;
-    onSessionBreakToggle?: () => void;
+    onSessionBreakToggle?: ((visible: boolean) => void) | (() => void);
 }
 
 const ScalesSection: React.FC<ScalesSectionProps> = ({
@@ -27,7 +27,7 @@ const ScalesSection: React.FC<ScalesSectionProps> = ({
                     <input
                         type="checkbox"
                         checked={isTimerVisible}
-                        onChange={() => onTimerToggle?.()}
+                        onChange={() => (onTimerToggle as any)?.(!isTimerVisible)}
                         className={styles.checkbox}
                     />
                     <span className={styles.checkmark}></span>
@@ -40,7 +40,7 @@ const ScalesSection: React.FC<ScalesSectionProps> = ({
                     <input
                         type="checkbox"
                         checked={isSessionBreakVisible}
-                        onChange={() => onSessionBreakToggle?.()}
+                        onChange={() => (onSessionBreakToggle as any)?.(!isSessionBreakVisible)}
                         className={styles.checkbox}
                     />
                     <span className={styles.checkmark}></span>

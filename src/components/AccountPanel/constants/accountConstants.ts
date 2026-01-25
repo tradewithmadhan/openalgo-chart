@@ -3,8 +3,13 @@
  * Tab definitions and configuration
  */
 
+export interface Tab {
+    id: string;
+    label: string;
+}
+
 // Tab definitions
-export const TABS = [
+export const TABS: Tab[] = [
     { id: 'positions', label: 'Positions' },
     { id: 'orders', label: 'Orders' },
     { id: 'holdings', label: 'Holdings' },

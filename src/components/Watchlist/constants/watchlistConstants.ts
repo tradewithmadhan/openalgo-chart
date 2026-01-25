@@ -8,7 +8,7 @@ import { isMarketOpen } from '../../../constants/marketConstants';
 export { isMarketOpen };
 
 // Symbol full names (can be extended or fetched from API)
-export const SYMBOL_FULL_NAMES = {
+export const SYMBOL_FULL_NAMES: Record<string, string> = {
     'NIFTY': 'Nifty 50 Index',
     'BANKNIFTY': 'Bank Nifty Index',
     'NIFTY50': 'Nifty 50 Index',
@@ -63,10 +63,8 @@ export const SYMBOL_FULL_NAMES = {
 /**
  * Check if market is open (simplified)
  * @deprecated Use isMarketOpen from constants/marketConstants instead
- * @param {string} exchange - Exchange code
- * @returns {boolean} Whether market is currently open
  */
-export function isMarketOpenNow(exchange) {
+export function isMarketOpenNow(exchange?: string): boolean {
     // Delegate to centralized market utility
     return isMarketOpen(exchange);
 }

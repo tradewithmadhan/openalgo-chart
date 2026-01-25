@@ -1,7 +1,7 @@
 /**
  * Account Panel Formatters
  * Utility functions for formatting and order status handling
- * 
+ *
  * NOTE: formatCurrency and formatPnL are re-exported from shared formatters
  * to eliminate duplication across the codebase
  */
@@ -11,12 +11,27 @@ import { formatCurrency, formatPnL, formatPercent, formatQuantity } from '../../
 import { normalizeStatus } from '../../../utils/shared/orderUtils';
 export { formatCurrency, formatPnL, formatPercent, formatQuantity, normalizeStatus };
 
+export interface SortConfig {
+    key: string;
+    direction: 'asc' | 'desc';
+}
+
+export interface OrderStats {
+    open: number;
+    completed: number;
+    rejected: number;
+}
+
+export interface Order {
+    status?: string;
+    order_status?: string;
+    [key: string]: any;
+}
+
 /**
  * Check if order status is open/pending (cancellable)
- * @param {string} status - Order status
- * @returns {boolean}
  */
-export const isOpenOrderStatus = (status) => {
+export const isOpenOrderStatus = (status: string): boolean => {
     const s = normalizeStatus(status);
 
     // Expanded list of cancellable statuses across different brokers
@@ -37,11 +52,9 @@ export const isOpenOrderStatus = (status) => {
 
 /**
  * Calculate order statistics from order list
- * @param {Array} orders - Orders array
- * @returns {Object} { open, completed, rejected }
  */
-export const calculateOrderStats = (orders) => {
-    return (orders || []).reduce((acc, o) => {
+export const calculateOrderStats = (orders: Order[]): OrderStats => {
+    return (orders || []).reduce((acc: OrderStats, o) => {
         const status = o.status || o.order_status || '';
         // Use isOpenOrderStatus to check if order is open/pending
         if (isOpenOrderStatus(status)) acc.open++;
@@ -53,11 +66,8 @@ export const calculateOrderStats = (orders) => {
 
 /**
  * Sort data array by a specific key
- * @param {Array} data - Data array to sort
- * @param {Object} sortConfig - Sort configuration { key, direction }
- * @returns {Array} Sorted data array
  */
-export const sortData = (data, sortConfig) => {
+export const sortData = <T extends Record<string, any>>(data: T[], sortConfig: SortConfig | null): T[] => {
     if (!sortConfig || !sortConfig.key) return data;
 
     return [...data].sort((a, b) => {
@@ -94,10 +104,8 @@ export const sortData = (data, sortConfig) => {
 
 /**
  * Format timestamp to human-readable time for closed positions
- * @param {string} timestamp - ISO timestamp
- * @returns {string} - "2:30 PM" or "Today 2:30 PM"
  */
-export const formatClosedTime = (timestamp) => {
+export const formatClosedTime = (timestamp: string | null | undefined): string => {
     if (!timestamp) return '-';
 
     const date = new Date(timestamp);

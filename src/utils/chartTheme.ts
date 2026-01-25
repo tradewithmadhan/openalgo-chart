@@ -26,7 +26,7 @@ export type ThemeType = 'dark' | 'light';
  */
 export const getChartTheme = (themeId: string): ThemeColors => {
     const theme = THEMES[themeId] || THEMES[DEFAULT_THEME];
-    return theme.colors;
+    return theme.colors as unknown as ThemeColors;
 };
 
 /**

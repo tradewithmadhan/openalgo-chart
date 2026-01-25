@@ -5,18 +5,7 @@
 import React from 'react';
 import type { ChangeEvent } from 'react';
 import styles from '../SettingsPopup.module.css';
-import { DEFAULT_CHART_APPEARANCE } from '../constants/settingsConstants';
-
-interface ChartAppearance {
-    candleUpColor: string;
-    candleDownColor: string;
-    wickUpColor: string;
-    wickDownColor: string;
-    showVerticalGridLines: boolean;
-    showHorizontalGridLines: boolean;
-    darkBackground: string;
-    lightBackground: string;
-}
+import { DEFAULT_CHART_APPEARANCE, ChartAppearance } from '../constants/settingsConstants';
 
 export interface AppearanceSectionProps {
     localAppearance: ChartAppearance;

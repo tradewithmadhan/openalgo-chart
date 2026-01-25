@@ -8,10 +8,20 @@ import { MARKET_OPEN, MARKET_CLOSE } from '../../../constants/marketConstants';
 export { MARKET_OPEN, MARKET_CLOSE };
 
 // Top N options for gainers/losers filter
-export const TOP_N_OPTIONS = [5, 10, 15, 20];
+export const TOP_N_OPTIONS: number[] = [5, 10, 15, 20];
+
+export interface ColumnWidths {
+    rank: number;
+    move: number;
+    symbol: number;
+    ltp: number;
+    change: number;
+    volume: number;
+    [key: string]: number;
+}
 
 // Default column widths
-export const DEFAULT_COLUMN_WIDTHS = {
+export const DEFAULT_COLUMN_WIDTHS: ColumnWidths = {
     rank: 32,
     move: 40,
     symbol: 80,
@@ -27,7 +37,9 @@ export const FILTER_MODES = {
     ALL: 'all',
     GAINERS: 'gainers',
     LOSERS: 'losers',
-};
+} as const;
+
+export type FilterMode = typeof FILTER_MODES[keyof typeof FILTER_MODES];
 
 export default {
     MARKET_OPEN,

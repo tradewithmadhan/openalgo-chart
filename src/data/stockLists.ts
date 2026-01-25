@@ -3,8 +3,20 @@
  * Contains Nifty 50 and other popular index constituents
  */
 
+export interface Stock {
+  symbol: string;
+  exchange: string;
+  name: string;
+}
+
+export interface StockListOption {
+  id: string;
+  name: string;
+  description: string;
+}
+
 // Nifty 50 constituents (as of 2024)
-export const NIFTY_50 = [
+export const NIFTY_50: Stock[] = [
   { symbol: 'RELIANCE', exchange: 'NSE', name: 'Reliance Industries' },
   { symbol: 'TCS', exchange: 'NSE', name: 'Tata Consultancy Services' },
   { symbol: 'HDFCBANK', exchange: 'NSE', name: 'HDFC Bank' },
@@ -58,7 +70,7 @@ export const NIFTY_50 = [
 ];
 
 // Bank Nifty constituents
-export const BANK_NIFTY = [
+export const BANK_NIFTY: Stock[] = [
   { symbol: 'HDFCBANK', exchange: 'NSE', name: 'HDFC Bank' },
   { symbol: 'ICICIBANK', exchange: 'NSE', name: 'ICICI Bank' },
   { symbol: 'KOTAKBANK', exchange: 'NSE', name: 'Kotak Mahindra Bank' },
@@ -74,7 +86,7 @@ export const BANK_NIFTY = [
 ];
 
 // IT Sector stocks
-export const NIFTY_IT = [
+export const NIFTY_IT: Stock[] = [
   { symbol: 'TCS', exchange: 'NSE', name: 'Tata Consultancy Services' },
   { symbol: 'INFY', exchange: 'NSE', name: 'Infosys' },
   { symbol: 'HCLTECH', exchange: 'NSE', name: 'HCL Technologies' },
@@ -88,7 +100,7 @@ export const NIFTY_IT = [
 ];
 
 // Available stock list options
-export const STOCK_LIST_OPTIONS = [
+export const STOCK_LIST_OPTIONS: StockListOption[] = [
   { id: 'watchlist', name: 'Watchlist', description: 'Your watchlist symbols' },
   { id: 'nifty50', name: 'Nifty 50', description: '50 large cap stocks' },
   { id: 'banknifty', name: 'Bank Nifty', description: 'Banking sector stocks' },
@@ -96,7 +108,7 @@ export const STOCK_LIST_OPTIONS = [
 ];
 
 // Get stock list by ID
-export const getStockList = (listId) => {
+export const getStockList = (listId: string): Stock[] => {
   switch (listId) {
     case 'nifty50':
       return NIFTY_50;

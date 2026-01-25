@@ -4869,7 +4869,7 @@ const ChartComponent = forwardRef<any, ChartComponentProps>(({
                 onMoveUp={handleMovePaneUp}
                 onDelete={handleDeletePane}
                 onClose={closePaneMenu}
-                theme={theme}
+                theme={theme as any}
             />
 
             {/* Per-Indicator Settings Dialog */}

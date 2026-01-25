@@ -9,7 +9,7 @@ import { LOG_LEVELS, LOG_LEVEL_LABELS, setLogLevel } from '../../../utils/logger
 
 export interface LoggingSectionProps {
     logLevel: number;
-    setLocalLogLevel: (level: number) => void;
+    setLocalLogLevel: ((level: number) => void) | React.Dispatch<React.SetStateAction<any>>;
 }
 
 const LoggingSection: React.FC<LoggingSectionProps> = ({ logLevel, setLocalLogLevel }) => {

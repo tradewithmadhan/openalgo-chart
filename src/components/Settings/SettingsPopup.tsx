@@ -12,14 +12,10 @@ import { useKeyboardNav } from '../../hooks/useKeyboardNav';
 import { ScalesSection, OpenAlgoSection, LoggingSection, AppearanceSection } from './sections';
 
 // Import constants
-import { DEFAULT_CHART_APPEARANCE } from './constants';
+import { DEFAULT_CHART_APPEARANCE, ChartAppearance } from './constants';
 
 type Theme = 'dark' | 'light';
 type SectionId = 'scales' | 'openalgo' | 'logging' | 'appearance' | 'shortcuts';
-
-interface ChartAppearance {
-    [key: string]: unknown;
-}
 
 interface Section {
     id: SectionId;
